@@ -1,58 +1,43 @@
 // lib/ai.js
-// AI layer for CanvAssist using OpenAI API
-// Three jobs:
-//   1. Decode rubric criteria into plain language
-//   2. Summarise what a weekly module covers
-//   3. Flag which modules are relevant to an assessment
+// Prompt builders for CanvAssist AI features
 //
-// IMPORTANT: OpenAI calls are routed through background.js to avoid CORS
-// The side panel cannot call external APIs directly — background.js can
-// All functions return null if AI fails — UI falls back to raw data gracefully
+// IMPORTANT: This file does NOT call OpenAI directly — that would cause CORS errors
+// All OpenAI calls are routed through background.js via chrome.runtime.sendMessage
+//
+// What lives here:   prompt builders + message sender
+// What lives in background.js: callOpenAI() + enrichUnit()
 
 // ─── BASE CALL ────────────────────────────────────────────────────────────────
 // Sends prompt to background.js which calls OpenAI and returns the result
-// This avoids the CORS error that happens when calling OpenAI from the side panel
 
 async function callOpenAI(prompt, maxTokens = 500) {
   return new Promise((resolve) => {
 
-    // First wake up the service worker, then send the real request
-    function wakeAndSend(retries = 5) {
-      // Ping with GET_STATUS to wake the service worker
-      chrome.runtime.sendMessage({ type: 'GET_STATUS' }, () => {
-        // Ignore the response — just needed to wake it up
-        if (chrome.runtime.lastError) {
-          // Service worker waking up — wait a bit then try AI request
-          if (retries > 0) {
-            console.log(`Waking service worker... (${retries} left)`)
-            setTimeout(() => wakeAndSend(retries - 1), 1000)
-          } else {
-            console.error('Could not wake service worker')
-            resolve(null)
-          }
-          return
-        }
-
-        // Service worker is awake — send the real AI request
-        chrome.runtime.sendMessage(
-          { type: 'AI_REQUEST', prompt, maxTokens },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              console.error('AI request failed:', chrome.runtime.lastError.message)
-              resolve(null)
+    function sendRequest(retries = 3) {
+      chrome.runtime.sendMessage(
+        { type: 'AI_REQUEST', prompt, maxTokens },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            const error = chrome.runtime.lastError.message
+            if (retries > 0) {
+              console.log(`Background not ready, retrying... (${retries} left)`)
+              setTimeout(() => sendRequest(retries - 1), 500)
               return
             }
-            if (response?.success) resolve(response.result)
-            else {
-              console.error('AI error:', response?.error)
-              resolve(null)
-            }
+            console.error('Background not responding:', error)
+            resolve(null)
+            return
           }
-        )
-      })
+          if (response?.success) resolve(response.result)
+          else {
+            console.error('AI request failed:', response?.error)
+            resolve(null)
+          }
+        }
+      )
     }
 
-    wakeAndSend()
+    sendRequest()
   })
 }
 
@@ -63,7 +48,6 @@ async function callOpenAI(prompt, maxTokens = 500) {
 export async function decodeRubric(assignmentName, rubric) {
   if (!rubric || rubric.length === 0) return null
 
-  // Format rubric criteria into readable text for the prompt
   const rubricText = rubric.map(criterion => {
     const ratingsText = criterion.ratings
       .map(r => `  - ${r.description} (${r.points}pts): ${r.longDescription}`)
@@ -93,7 +77,6 @@ Return only the bullet points, one per line, no numbering, no extra commentary.
   const response = await callOpenAI(prompt, 400)
   if (!response) return null
 
-  // Split response into array of bullet points
   return response
     .split('\n')
     .map(line => line.replace(/^[-•*]\s*/, '').trim())
@@ -138,56 +121,4 @@ Answer with only "yes" or "no".
 
   const response = await callOpenAI(prompt, 10)
   return response?.toLowerCase().includes('yes') ?? false
-}
-
-// ─── 4. FULL ENRICHMENT ───────────────────────────────────────────────────────
-// Runs all AI enrichment for a unit after Canvas data is synced
-// Called from background.js after saveData()
-// Returns enriched unit with AI summaries filled in
-
-export async function enrichUnit(unit) {
-  const enrichedAssessments = await Promise.all(
-    unit.assessments.map(async (assessment) => {
-      // Skip if already has AI summary — no need to call API again
-      if (assessment.aiRubricSummary) return assessment
-
-      // Only decode if rubric exists
-      if (!assessment.hasRubric) return assessment
-
-      console.log(`Decoding rubric for ${assessment.name}...`)
-      const aiRubricSummary = await decodeRubric(assessment.name, assessment.rubric)
-
-      return { ...assessment, aiRubricSummary }
-    })
-  )
-
-  const enrichedModules = await Promise.all(
-    unit.modules.map(async (module) => {
-      // Skip if already has AI summary
-      if (module.aiSummary) return module
-
-      const itemTitles = module.items.map(i => i.title)
-      console.log(`Summarising ${module.fullName}...`)
-      const aiSummary = await summariseWeek(module.fullName, itemTitles)
-
-      // Check relevance against each assessment
-      const relevantAssessments = []
-      for (const assessment of unit.assessments) {
-        const relevant = await isModuleRelevant(
-          module.topic,
-          assessment.name,
-          assessment.description
-        )
-        if (relevant) relevantAssessments.push(assessment.name)
-      }
-
-      return { ...module, aiSummary, relevantAssessments }
-    })
-  )
-
-  return {
-    ...unit,
-    assessments: enrichedAssessments,
-    modules: enrichedModules,
-  }
 }
