@@ -1,35 +1,58 @@
 // screens/AssessmentDetail.jsx
-// Third screen — shown when student taps an assessment from UnitView
-// Shows everything about one assessment in one place:
-//   - Key info (due date, points, status)
-//   - Rubric decoded (AI summary if available, raw rubric if not)
-//   - Relevant materials (AI flagged if available)
-//   - Grade what-if calculator
+// Reads fresh data from storage on mount so AI summaries show correctly
+// even if AI enrichment finished after the component first rendered
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getUnit } from '../lib/storage.js'
 import { projectGrade, calculateCurrentGrade, getUrgencyLabel, getUrgencyColor } from '../lib/utils.js'
 
-export default function AssessmentDetail({ assessment, unit, onBack }) {
+export default function AssessmentDetail({ assessment: initialAssessment, unit: initialUnit, onBack }) {
+  const [assessment, setAssessment] = useState(initialAssessment)
+  const [unit, setUnit] = useState(initialUnit)
   const [whatIfScore, setWhatIfScore] = useState(70)
+
+  useEffect(() => {
+    // Load fresh data immediately — AI may have finished after component mounted
+    loadFreshData()
+
+    // Also reload when AI enrichment completes
+    const handleMessage = (msg) => {
+      if (msg.type === 'AI_UNIT_COMPLETE' && msg.unitId === initialUnit.id) loadFreshData()
+      if (msg.type === 'AI_COMPLETE') loadFreshData()
+    }
+
+    chrome.runtime.onMessage.addListener(handleMessage)
+    return () => chrome.runtime.onMessage.removeListener(handleMessage)
+  }, [initialAssessment.id])
+
+  async function loadFreshData() {
+    const freshUnit = await getUnit(initialUnit.id)
+    if (!freshUnit) return
+    const freshAssessment = freshUnit.assessments.find(a => a.id === initialAssessment.id)
+    if (freshAssessment) setAssessment(freshAssessment)
+    setUnit(freshUnit)
+  }
 
   const grade = unit.currentGrade ?? calculateCurrentGrade(unit.assessments)
   const projected = projectGrade(unit.assessments, assessment.id, whatIfScore)
-
-  const { submission } = assessment
-  const isGraded = submission?.status === 'graded'
-  const isSubmitted = submission?.status === 'submitted'
+  const passThreshold = 50
 
   return (
-    <div className='assessment-detail'>
+    <div className='screen'>
 
       {/* Header */}
-      <div className='assessment-detail-header'>
+      <div className='app-header'>
         <button className='back-btn' onClick={onBack}>← Back</button>
-        <div className='breadcrumb'>
-          <span>{unit.code}</span>
-          <span className='breadcrumb-sep'>›</span>
-          <span>{assessment.name}</span>
-        </div>
+        <span className='app-sync-label'>{unit.code}</span>
+      </div>
+
+      {/* Breadcrumb */}
+      <div className='breadcrumb'>
+        <span>{unit.code}</span>
+        <span className='breadcrumb-sep'>›</span>
+        <span style={{ color: 'var(--text-primary)', fontSize: 11 }}>
+          {assessment.name.length > 40 ? assessment.name.slice(0, 40) + '...' : assessment.name}
+        </span>
       </div>
 
       {/* Key info grid */}
@@ -52,9 +75,9 @@ export default function AssessmentDetail({ assessment, unit, onBack }) {
         </div>
         <div className='info-card'>
           <div className='info-value'>
-            {isGraded
-              ? `${submission.score}/${assessment.pointsPossible}`
-              : isSubmitted
+            {assessment.submission?.status === 'graded'
+              ? `${assessment.submission.score ?? '—'}pts`
+              : assessment.submission?.status === 'submitted'
                 ? 'Submitted'
                 : 'Not submitted'
             }
@@ -63,84 +86,122 @@ export default function AssessmentDetail({ assessment, unit, onBack }) {
         </div>
       </div>
 
-      {/* Due date + submission details */}
-      <div className='assessment-meta'>
-        <span>Due {assessment.dueDateFormatted}</span>
-        {submission?.late && <span className='meta-tag meta-tag--late'>Late</span>}
-        {submission?.missing && <span className='meta-tag meta-tag--missing'>Missing</span>}
+      {/* Due date + late/missing tags */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          Due {assessment.dueDateFormatted}
+        </span>
+        {assessment.submission?.late && (
+          <span className='meta-tag meta-tag--late'>Late</span>
+        )}
+        {assessment.submission?.missing && (
+          <span className='meta-tag meta-tag--missing'>Missing</span>
+        )}
       </div>
 
       <div className='divider' />
 
       {/* Rubric section */}
-      <section className='detail-section'>
+      <section>
         <h3 className='section-heading'>What markers want</h3>
 
         {assessment.aiRubricSummary ? (
-          // AI decoded version — shown once ai.js is integrated
-          <AiRubricSummary summary={assessment.aiRubricSummary} />
+          // ✅ AI decoded — shown after enrichment
+          <div>
+            <span className='ai-badge'>AI decoded</span>
+            <ul className='ai-summary-list'>
+              {assessment.aiRubricSummary.map((point, i) => (
+                <li key={i} className='ai-summary-item'>{point}</li>
+              ))}
+            </ul>
+          </div>
         ) : assessment.hasRubric ? (
-          // Raw rubric — shown before AI is integrated
+          // Raw rubric — shown before AI runs
           <RawRubric rubric={assessment.rubric} />
         ) : (
-          // No rubric set by lecturer
-          <NoRubric description={assessment.description} />
+          // No rubric — show description
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            {assessment.description || 'No rubric or description available.'}
+          </p>
         )}
       </section>
 
       <div className='divider' />
 
       {/* Relevant materials section */}
-      <section className='detail-section'>
+      <section>
         <h3 className='section-heading'>Relevant materials</h3>
 
-        {assessment.relevantModules && assessment.relevantModules.length > 0 ? (
-          // AI flagged relevant weeks — shown once ai.js is integrated
-          <RelevantMaterials
-            modules={assessment.relevantModules}
-            allModules={unit.modules}
-          />
-        ) : (
-          // Fallback — show all modules for this unit
-          <AllModules modules={unit.modules} />
-        )}
+        <RelevantMaterials
+          modules={unit.modules}
+          assessmentName={assessment.name}
+        />
       </section>
 
       <div className='divider' />
 
       {/* Grade what-if calculator */}
-      <section className='detail-section'>
+      <section>
         <h3 className='section-heading'>Grade what-if</h3>
-        <GradeCalculator
-          assessment={assessment}
-          currentGrade={grade}
-          projectedGrade={projected}
-          whatIfScore={whatIfScore}
-          onScoreChange={setWhatIfScore}
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+          If I score {whatIfScore}% on this assessment
+        </div>
+
+        <input
+          type='range'
+          min={0}
+          max={100}
+          step={1}
+          value={whatIfScore}
+          onChange={e => setWhatIfScore(Number(e.target.value))}
+          className='grade-slider'
         />
+
+        <div className='slider-labels'>
+          <span>0%</span>
+          <span>50%</span>
+          <span>100%</span>
+        </div>
+
+        <div className='calculator-results'>
+          <div className='calculator-result-row'>
+            <span className='result-label'>Current overall</span>
+            <span className='result-value'>
+              {grade !== null ? `${grade}%` : '—'}
+            </span>
+          </div>
+          <div className='calculator-result-row'>
+            <span className='result-label'>Projected overall</span>
+            <span className={`result-value result-value--${projected >= passThreshold ? 'pass' : 'fail'}`}>
+              {projected !== null ? `${projected}%` : '—'}
+            </span>
+          </div>
+          <div className='calculator-result-row'>
+            <span className='result-label'>To pass this unit</span>
+            <span className='result-value'>Need 50%+</span>
+          </div>
+        </div>
+
+        {projected !== null && (
+          <p className={`calculator-message calculator-message--${projected >= passThreshold ? 'pass' : 'fail'}`}>
+            {projected >= 85
+              ? 'Looking great — on track for Distinction.'
+              : projected >= 65
+                ? 'On track — keep it up.'
+                : projected >= passThreshold
+                  ? 'Passing but tight — worth putting in more effort.'
+                  : "Below passing — you'll need to score higher to pass this unit."
+            }
+          </p>
+        )}
       </section>
 
     </div>
   )
 }
 
-// ─── RUBRIC COMPONENTS ────────────────────────────────────────────────────────
+// ─── COMPONENTS ───────────────────────────────────────────────────────────────
 
-// Shown after AI is integrated — plain language bullets
-function AiRubricSummary({ summary }) {
-  return (
-    <div className='ai-summary'>
-      <span className='ai-badge'>AI decoded</span>
-      <ul className='ai-summary-list'>
-        {summary.map((point, i) => (
-          <li key={i} className='ai-summary-item'>{point}</li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-// Shown before AI — raw rubric criteria with ratings
 function RawRubric({ rubric }) {
   return (
     <div className='raw-rubric'>
@@ -150,12 +211,9 @@ function RawRubric({ rubric }) {
             <span className='rubric-criterion-name'>{criterion.description}</span>
             <span className='rubric-criterion-points'>{criterion.points}pts</span>
           </div>
-
           {criterion.longDescription && (
             <p className='rubric-criterion-desc'>{criterion.longDescription}</p>
           )}
-
-          {/* Rating levels — HD, D, C, P, F */}
           <div className='rubric-ratings'>
             {criterion.ratings.map(rating => (
               <div key={rating.id} className='rubric-rating'>
@@ -175,126 +233,59 @@ function RawRubric({ rubric }) {
   )
 }
 
-// Shown when no rubric exists — just show the description
-function NoRubric({ description }) {
-  return (
-    <div className='no-rubric'>
-      {description ? (
-        <p className='assessment-description'>{description}</p>
-      ) : (
-        <p className='no-rubric-text'>No rubric or description available for this assessment.</p>
-      )}
-    </div>
+function RelevantMaterials({ modules, assessmentName }) {
+  // Find modules AI flagged as relevant to this assessment
+  const relevant = modules.filter(
+    m => m.relevantAssessments?.includes(assessmentName)
   )
-}
 
-// ─── MATERIALS COMPONENTS ─────────────────────────────────────────────────────
-
-// Shown after AI flags relevant modules
-function RelevantMaterials({ modules, allModules }) {
-  const relevant = allModules.filter(m => modules.includes(m.id))
-
-  return (
-    <div className='relevant-materials'>
-      {relevant.map(module => (
-        <div key={module.id} className='relevant-module'>
-          <span className='relevant-module-week'>Week {module.weekNumber}</span>
-          <span className='relevant-module-topic'>{module.topic}</span>
-          {module.aiSummary && (
-            <p className='relevant-module-summary'>{module.aiSummary}</p>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// Shown before AI — list all modules so student can find relevant ones themselves
-function AllModules({ modules }) {
-  if (!modules || modules.length === 0) {
-    return <p className='no-materials'>No materials found for this unit.</p>
+  if (relevant.length > 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {relevant.map(module => (
+          <div key={module.id} style={{
+            padding: '10px 12px',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+          }}>
+            <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+              Week {module.weekNumber}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 4 }}>
+              {module.topic}
+            </div>
+            {module.aiSummary && (
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                {module.aiSummary}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    )
   }
 
+  // Fallback — show all modules before AI flags them
   return (
-    <div className='all-modules'>
-      <p className='all-modules-hint'>
-        Check which weeks are relevant to this assessment.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+        Check which weeks are relevant to this assessment:
       </p>
       {modules.map(module => (
-        <div key={module.id} className='module-row'>
-          <span className='module-row-week'>Week {module.weekNumber}</span>
-          <span className='module-row-topic'>{module.topic}</span>
+        <div key={module.id} style={{
+          display: 'flex',
+          gap: 10,
+          padding: '7px 0',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)', minWidth: 48 }}>
+            Wk {module.weekNumber}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
+            {module.topic}
+          </span>
         </div>
       ))}
-    </div>
-  )
-}
-
-// ─── GRADE CALCULATOR ─────────────────────────────────────────────────────────
-
-function GradeCalculator({ assessment, currentGrade, projectedGrade, whatIfScore, onScoreChange }) {
-  const passThreshold = 50
-
-  return (
-    <div className='grade-calculator'>
-
-      <div className='calculator-row'>
-        <span className='calculator-label'>
-          If I score {whatIfScore}% on this assessment
-        </span>
-      </div>
-
-      {/* Slider */}
-      <input
-        type='range'
-        min={0}
-        max={100}
-        step={1}
-        value={whatIfScore}
-        onChange={e => onScoreChange(Number(e.target.value))}
-        className='grade-slider'
-      />
-
-      <div className='slider-labels'>
-        <span>0%</span>
-        <span>50%</span>
-        <span>100%</span>
-      </div>
-
-      {/* Results */}
-      <div className='calculator-results'>
-        <div className='calculator-result-row'>
-          <span className='result-label'>Current overall</span>
-          <span className='result-value'>
-            {currentGrade !== null ? `${currentGrade}%` : '—'}
-          </span>
-        </div>
-        <div className='calculator-result-row'>
-          <span className='result-label'>Projected overall</span>
-          <span className={`result-value result-value--${projectedGrade >= passThreshold ? 'pass' : 'fail'}`}>
-            {projectedGrade !== null ? `${projectedGrade}%` : '—'}
-          </span>
-        </div>
-        <div className='calculator-result-row'>
-          <span className='result-label'>To pass this unit</span>
-          <span className='result-value'>Need 50%+</span>
-        </div>
-      </div>
-
-      {/* Honest message */}
-      {projectedGrade !== null && (
-        <p className={`calculator-message ${projectedGrade >= passThreshold ? 'calculator-message--pass' : 'calculator-message--fail'}`}>
-          {projectedGrade >= 85
-            ? 'Looking great — on track for Distinction.'
-            : projectedGrade >= 65
-              ? 'On track — keep it up.'
-              : projectedGrade >= passThreshold
-                ? 'Passing but tight — worth putting in more effort.'
-                : 'Below passing — you\'ll need to score higher to pass this unit.'
-          }
-        </p>
-      )}
-
     </div>
   )
 }
