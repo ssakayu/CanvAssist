@@ -12,14 +12,17 @@ export default defineManifest({
     'storage',
     'sidePanel',
     'tabs',
+    'alarms', 
   ],
   host_permissions: [
     'https://*.instructure.com/*',
     'https://canvas.qut.edu.au/*',
+    'https://api.openai.com/*',
   ],
   background: {
     service_worker: 'src/background.js',
     type: 'module',
+    persistent: false,
   },
   action: {},
   side_panel: {
