@@ -4,17 +4,17 @@
 //
 // Data shape stored:
 // {
-//   studylens_data: {
+//   canvassist_data: {
 //     lastSync: timestamp,
 //     units: [{ id, code, friendlyName, assessments, modules, ... }]
 //   },
-//   studylens_completed: {
+//   canvassist_completed: {
 //     [moduleId]: true | false   ← student tick state per module
 //   }
 // }
 
-const STORAGE_KEY = 'studylens_data'
-const COMPLETED_KEY = 'studylens_completed'
+const STORAGE_KEY = 'canvassist_data'
+const COMPLETED_KEY = 'canvassist_completed'
 
 // ─── READ ─────────────────────────────────────────────────────────────────────
 

@@ -1,22 +1,47 @@
-import crxLogo from '@/assets/crx.svg'
-import reactLogo from '@/assets/react.svg'
-import viteLogo from '@/assets/vite.svg'
-import HelloWorld from '@/components/HelloWorld'
-import './App.css'
+import { useState } from 'react'
+import Overview from '../screens/overview.jsx'
+import UnitView from '../screens/unitView.jsx'
+import AssessmentDetail from '../screens/assessmentDetail.jsx'
 
 export default function App() {
+  const [currentScreen, setCurrentScreen] = useState('overview')
+  const [selectedUnit, setSelectedUnit] = useState(null)
+  const [selectedAssessment, setSelectedAssessment] = useState(null)
+
+  function goToUnit(unit) {
+    setSelectedUnit(unit)
+    setCurrentScreen('unit')
+  }
+
+  function goToAssessment(assessment) {
+    setSelectedAssessment(assessment)
+    setCurrentScreen('assessment')
+  }
+
+  function goBack() {
+    if (currentScreen === 'assessment') setCurrentScreen('unit')
+    if (currentScreen === 'unit') setCurrentScreen('overview')
+  }
+
   return (
     <div>
-      <a href="https://vite.dev" target="_blank" rel="noreferrer">
-        <img src={viteLogo} className="logo" alt="Vite logo" />
-      </a>
-      <a href="https://reactjs.org/" target="_blank" rel="noreferrer">
-        <img src={reactLogo} className="logo react" alt="React logo" />
-      </a>
-      <a href="https://crxjs.dev/vite-plugin" target="_blank" rel="noreferrer">
-        <img src={crxLogo} className="logo crx" alt="crx logo" />
-      </a>
-      <HelloWorld msg="Vite + React + CRXJS" />
+      {currentScreen === 'overview' && (
+        <Overview onSelectUnit={goToUnit} />
+      )}
+      {currentScreen === 'unit' && (
+        <UnitView
+          unit={selectedUnit}
+          onBack={goBack}
+          onSelectAssessment={goToAssessment}
+        />
+      )}
+      {currentScreen === 'assessment' && (
+        <AssessmentDetail
+          assessment={selectedAssessment}
+          unit={selectedUnit}
+          onBack={goBack}
+        />
+      )}
     </div>
   )
 }

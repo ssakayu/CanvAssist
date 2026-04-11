@@ -3,7 +3,7 @@ import pkg from './package.json'
 
 export default defineManifest({
   manifest_version: 3,
-  name: pkg.name,
+  name: 'CanvAssist',
   version: pkg.version,
   icons: {
     48: 'public/logo.png',
@@ -17,11 +17,11 @@ export default defineManifest({
     'https://*.instructure.com/*',
     'https://canvas.qut.edu.au/*',
   ],
-  action: {
-    default_icon: {
-      48: 'public/logo.png',
-    },
+  background: {
+    service_worker: 'src/background.js',
+    type: 'module',
   },
+  action: {},
   side_panel: {
     default_path: 'src/sidepanel/index.html',
   },
