@@ -1,14 +1,16 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import App from './views/App.jsx'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import AppWrapper from '../components/AppWrapper';
 
-console.log('[CRXJS] Hello world from content script!')
+console.log('[CRXJS] Hello world from content script!');
 
-const container = document.createElement('div')
-container.id = 'crxjs-app'
-document.body.appendChild(container)
+const container = document.createElement('div');
+container.id = 'crxjs-app';
+document.body.appendChild(container);
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <GlobalProvider>
+      <AppWrapper />
+    </GlobalProvider>
   </StrictMode>,
-)
+);

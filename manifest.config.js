@@ -12,6 +12,9 @@ export default defineManifest({
     'sidePanel',
     'contentSettings',
   ],
+  host_permissions: [
+    'https://api.openai.com/*',
+  ],
   action: {
     default_icon: {
       48: 'public/logo.png',
