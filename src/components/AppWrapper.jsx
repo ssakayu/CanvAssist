@@ -4,12 +4,13 @@ import Overview from './views/Overview';
 import Unit from './views/Unit';
 import { useEffect } from 'react';
 import Header from './header/Header';
-
+import { useCanvasData } from '../lib/useCanvasData' 
 
 export default function AppWrapper() {
+  useCanvasData()
 
   const {view, setView} = useGlobal();
-
+  
   useEffect(() => {
     setView({
       page: 'overview',

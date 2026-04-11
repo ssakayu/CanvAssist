@@ -27,3 +27,25 @@
   text-align: left;
   box-sizing: border-box;
 }
+
+
+.canvAssist-sync {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--text-secondary, #6b7280);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.canvAssist-sync:hover {
+  background: rgba(0,0,0,0.05);
+  color: #111827;
+}

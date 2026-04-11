@@ -1,14 +1,18 @@
 import { useGlobal } from '../../context/GlobalContext'
 
 export default function Header() {
-  const { previousView, view, setView } = useGlobal();
+  const { previousView, view, setView } = useGlobal()
 
-  const canGoBack = Boolean(previousView?.page && view.page !== 'overview');
+  const canGoBack = Boolean(previousView?.page && view.page !== 'overview')
 
   function handleBack() {
     if (previousView?.page) {
-      setView(previousView);
+      setView(previousView)
     }
+  }
+
+  function handleSync() {
+    chrome.runtime.sendMessage({ type: 'SYNC_NOW' })
   }
 
   return (
@@ -23,8 +27,9 @@ export default function Header() {
         >
           ←
         </button>
-      ) : <div style={{width: '28px', height: '28px', opacity: 0}}></div>}
-
+      ) : (
+        <div style={{ width: '28px', height: '28px', opacity: 0 }} />
+      )}
 
       <div className="canvAssist-headerBrandRow">
         <div className="canvAssist-brand">
@@ -32,6 +37,16 @@ export default function Header() {
           <span className="canvAssist-title">CanvAssist</span>
         </div>
       </div>
+
+      <button
+        type="button"
+        className="canvAssist-sync"
+        onClick={handleSync}
+        aria-label="Sync Canvas data"
+        title="Sync Canvas data"
+      >
+        ↻
+      </button>
 
     </header>
   )
