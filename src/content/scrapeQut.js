@@ -83,6 +83,85 @@ function mapCourse(course) {
 
 async function fetchAssignmentsForCourse(course) {
   try {
+    const groups = await fetchCanvasJson(`/api/v1/courses/${course.id}/assignment_groups?include[]=assignments&per_page=100`)
+    const assignments = await fetchCanvasJson(`/api/v1/courses/${course.id}/assignments?per_page=100`)
+    const courseDetails = await fetchCanvasJson(`/api/v1/courses/${course.id}`)
+    const overallWeightByAssignmentId = new Map()
+    const groupWeightById = new Map()
+    const groupPointsById = new Map()
+    const assignmentCountByGroupId = new Map()
+    const assignmentInfoById = new Map()
+
+    for (const group of groups || []) {
+      groupWeightById.set(String(group.id), typeof group?.group_weight === 'number' ? group.group_weight : null)
+    }
+
+    for (const assignment of assignments || []) {
+      const assignmentId = String(assignment.id)
+      const groupId = String(assignment.assignment_group_id)
+      const pointsPossible = typeof assignment?.points_possible === 'number' ? assignment.points_possible : null
+
+      assignmentInfoById.set(assignmentId, { groupId, pointsPossible })
+      assignmentCountByGroupId.set(groupId, (assignmentCountByGroupId.get(groupId) ?? 0) + 1)
+
+      if (pointsPossible != null && pointsPossible > 0) {
+        groupPointsById.set(groupId, (groupPointsById.get(groupId) ?? 0) + pointsPossible)
+      }
+    }
+
+    for (const [assignmentId, info] of assignmentInfoById.entries()) {
+      const groupWeight = groupWeightById.get(info.groupId)
+      const totalPoints = groupPointsById.get(info.groupId) ?? 0
+
+      if (typeof groupWeight !== 'number') continue
+
+      if (info.pointsPossible != null && info.pointsPossible > 0 && totalPoints > 0) {
+        const overallWeight = (info.pointsPossible / totalPoints) * groupWeight
+        overallWeightByAssignmentId.set(assignmentId, Math.round(overallWeight * 100) / 100)
+        continue
+      }
+
+      if ((assignmentCountByGroupId.get(info.groupId) ?? 0) === 1) {
+        overallWeightByAssignmentId.set(assignmentId, Math.round(groupWeight * 100) / 100)
+      }
+    }
+
+    const canUseGroupWeights =
+      courseDetails?.apply_assignment_group_weights === true ||
+      Array.from(groupWeightById.values()).some((value) => typeof value === 'number' && value > 0)
+
+    const buildPointsBasedWeights = () => {
+      const map = new Map()
+      const eligible = [...assignmentInfoById.entries()].filter(([, info]) => info.pointsPossible != null && info.pointsPossible > 0)
+      const totalCoursePoints = eligible.reduce((sum, [, info]) => sum + info.pointsPossible, 0)
+      if (totalCoursePoints <= 0) return map
+
+      for (const [assignmentId, info] of eligible) {
+        const overallWeight = (info.pointsPossible / totalCoursePoints) * 100
+        map.set(assignmentId, Math.round(overallWeight * 100) / 100)
+      }
+
+      return map
+    }
+
+    if (!canUseGroupWeights) {
+      const pointsMap = buildPointsBasedWeights()
+      if (pointsMap.size) {
+        overallWeightByAssignmentId.clear()
+        for (const [key, value] of pointsMap.entries()) overallWeightByAssignmentId.set(key, value)
+      }
+    } else {
+      const totalOverall = [...overallWeightByAssignmentId.values()].reduce((sum, value) => sum + value, 0)
+      const isPlausibleTotal = totalOverall >= 95 && totalOverall <= 105
+      if (!isPlausibleTotal) {
+        const pointsMap = buildPointsBasedWeights()
+        if (pointsMap.size) {
+          overallWeightByAssignmentId.clear()
+          for (const [key, value] of pointsMap.entries()) overallWeightByAssignmentId.set(key, value)
+        }
+      }
+    }
+
     const submissions = await fetchCanvasJson(
       `/api/v1/courses/${course.id}/students/submissions?student_ids[]=self&include[]=assignment&per_page=100`,
     )
@@ -91,8 +170,27 @@ async function fetchAssignmentsForCourse(course) {
       .filter((submission) => submission?.assignment?.name)
       .map((submission) => {
         const assignment = submission.assignment
+        const assignmentId = String(assignment.id)
+        const assignmentInfo = assignmentInfoById.get(assignmentId)
+        const groupId = String(assignment.assignment_group_id ?? assignmentInfo?.groupId ?? '')
         const dueAt = assignment?.due_at || null
         const daysLeft = toDaysLeft(dueAt)
+        const pointsPossible =
+          typeof assignment?.points_possible === 'number' ? assignment.points_possible : (assignmentInfo?.pointsPossible ?? null)
+
+        let overallWeight = overallWeightByAssignmentId.get(assignmentId) ?? null
+        if (overallWeight == null && groupId) {
+          const groupWeight = groupWeightById.get(groupId)
+          const totalPoints = groupPointsById.get(groupId) ?? 0
+          if (typeof groupWeight === 'number') {
+            if (typeof pointsPossible === 'number' && pointsPossible > 0 && totalPoints > 0) {
+              overallWeight = Math.round(((pointsPossible / totalPoints) * groupWeight) * 100) / 100
+            } else if (totalPoints <= 0) {
+              overallWeight = Math.round(groupWeight * 100) / 100
+            }
+          }
+        }
+
         return {
           id: `a-${assignment.id}`,
           unitCode: course.code,
@@ -101,8 +199,9 @@ async function fetchAssignmentsForCourse(course) {
           dueText: formatDueText(dueAt),
           dueAt,
           score: submission.score,
-          possible: assignment?.points_possible,
-          weight: typeof assignment.points_possible === 'number' ? Math.round(assignment.points_possible) : null,
+          possible: pointsPossible,
+          weight: pointsPossible != null ? Math.round(pointsPossible) : null,
+          overallWeight,
           status: inferAssessmentStatus(daysLeft),
           graded: submission.score !== null,
           workflow_state: submission.workflow_state,

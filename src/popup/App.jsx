@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const markerNotes = [
-  'Working software matters more than docs - app must run cleanly for the demo.',
-  'Explain design decisions - tutors want reasoning, not just what you built.',
-  'Testing evidence is required for Distinction - unit tests or documented manual tests.',
-  'Git history should show individual contributions - avoid giant bulk pushes.',
-]
-
 const MESSAGE_TYPES = {
   SCRAPE: 'STUDYLENS_SCRAPE',
 }
@@ -125,6 +118,95 @@ async function requestCanvasSnapshotFromPage(tabId) {
         return res.json()
       }
 
+      const buildAssessmentMeta = async (courseId) => {
+        const groups = await requestData(`/api/v1/courses/${courseId}/assignment_groups?include[]=assignments&per_page=100`)
+        const assignments = await requestData(`/api/v1/courses/${courseId}/assignments?per_page=100`)
+        const courseDetails = await requestData(`/api/v1/courses/${courseId}`)
+
+        const overallWeightByAssignmentId = new Map()
+        const groupWeightById = new Map()
+        const groupPointsById = new Map()
+        const assignmentCountByGroupId = new Map()
+        const assignmentInfoById = new Map()
+
+        for (const group of groups || []) {
+          groupWeightById.set(String(group.id), typeof group?.group_weight === 'number' ? group.group_weight : null)
+        }
+
+        for (const assignment of assignments || []) {
+          const assignmentId = String(assignment.id)
+          const groupId = String(assignment.assignment_group_id)
+          const pointsPossible = typeof assignment?.points_possible === 'number' ? assignment.points_possible : null
+
+          assignmentInfoById.set(assignmentId, { groupId, pointsPossible })
+          assignmentCountByGroupId.set(groupId, (assignmentCountByGroupId.get(groupId) ?? 0) + 1)
+
+          if (pointsPossible != null && pointsPossible > 0) {
+            groupPointsById.set(groupId, (groupPointsById.get(groupId) ?? 0) + pointsPossible)
+          }
+        }
+
+        for (const [assignmentId, info] of assignmentInfoById.entries()) {
+          const groupWeight = groupWeightById.get(info.groupId)
+          const totalPoints = groupPointsById.get(info.groupId) ?? 0
+
+          if (typeof groupWeight !== 'number') continue
+
+          if (info.pointsPossible != null && info.pointsPossible > 0 && totalPoints > 0) {
+            const overallWeight = (info.pointsPossible / totalPoints) * groupWeight
+            overallWeightByAssignmentId.set(assignmentId, Math.round(overallWeight * 100) / 100)
+            continue
+          }
+
+          if ((assignmentCountByGroupId.get(info.groupId) ?? 0) === 1) {
+            overallWeightByAssignmentId.set(assignmentId, Math.round(groupWeight * 100) / 100)
+          }
+        }
+
+        const canUseGroupWeights =
+          courseDetails?.apply_assignment_group_weights === true ||
+          Array.from(groupWeightById.values()).some((value) => typeof value === 'number' && value > 0)
+
+        const buildPointsBasedWeights = () => {
+          const map = new Map()
+          const eligible = [...assignmentInfoById.entries()].filter(([, info]) => info.pointsPossible != null && info.pointsPossible > 0)
+          const totalCoursePoints = eligible.reduce((sum, [, info]) => sum + info.pointsPossible, 0)
+          if (totalCoursePoints <= 0) return map
+
+          for (const [assignmentId, info] of eligible) {
+            const overallWeight = (info.pointsPossible / totalCoursePoints) * 100
+            map.set(assignmentId, Math.round(overallWeight * 100) / 100)
+          }
+
+          return map
+        }
+
+        if (!canUseGroupWeights) {
+          const pointsMap = buildPointsBasedWeights()
+          if (pointsMap.size) {
+            overallWeightByAssignmentId.clear()
+            for (const [key, value] of pointsMap.entries()) overallWeightByAssignmentId.set(key, value)
+          }
+        } else {
+          const totalOverall = [...overallWeightByAssignmentId.values()].reduce((sum, value) => sum + value, 0)
+          const isPlausibleTotal = totalOverall >= 95 && totalOverall <= 105
+          if (!isPlausibleTotal) {
+            const pointsMap = buildPointsBasedWeights()
+            if (pointsMap.size) {
+              overallWeightByAssignmentId.clear()
+              for (const [key, value] of pointsMap.entries()) overallWeightByAssignmentId.set(key, value)
+            }
+          }
+        }
+
+        return {
+          overallWeightByAssignmentId,
+          groupWeightById,
+          groupPointsById,
+          assignmentInfoById,
+        }
+      }
+
       const extractCode = (courseObj) => {
         // First try course_code field if it exists
         if (courseObj.course_code) {
@@ -186,6 +268,7 @@ async function requestCanvasSnapshotFromPage(tabId) {
       // For each course, fetch actual student submissions as assessments
       for (const unit of units) {
         try {
+          const assessmentMeta = await buildAssessmentMeta(unit.id)
           const submissions = await requestData(
             `/api/v1/courses/${unit.id}/students/submissions?student_ids[]=self&include[]=assignment&per_page=100`,
           )
@@ -194,8 +277,28 @@ async function requestCanvasSnapshotFromPage(tabId) {
             if (!submission?.assignment?.name) continue
             
             const assignment = submission.assignment
+            const assignmentId = String(assignment.id)
+            const assignmentInfo = assessmentMeta.assignmentInfoById.get(assignmentId)
+            const groupId = String(assignment.assignment_group_id ?? assignmentInfo?.groupId ?? '')
             const dueAt = assignment?.due_at || null
             const daysLeft = toDaysLeft(dueAt)
+            const pointsPossible =
+              typeof assignment?.points_possible === 'number'
+                ? assignment.points_possible
+                : (assignmentInfo?.pointsPossible ?? null)
+
+            let overallWeight = assessmentMeta.overallWeightByAssignmentId.get(assignmentId) ?? null
+            if (overallWeight == null && groupId) {
+              const groupWeight = assessmentMeta.groupWeightById.get(groupId)
+              const totalPoints = assessmentMeta.groupPointsById.get(groupId) ?? 0
+              if (typeof groupWeight === 'number') {
+                if (typeof pointsPossible === 'number' && pointsPossible > 0 && totalPoints > 0) {
+                  overallWeight = Math.round(((pointsPossible / totalPoints) * groupWeight) * 100) / 100
+                } else if (totalPoints <= 0) {
+                  overallWeight = Math.round(groupWeight * 100) / 100
+                }
+              }
+            }
             
             assessments.push({
               id: `a-${assignment.id}`,
@@ -206,9 +309,10 @@ async function requestCanvasSnapshotFromPage(tabId) {
                 ? new Date(dueAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
                 : 'No due date',
               dueAt,
-              weight: typeof assignment.points_possible === 'number' ? Math.round(assignment.points_possible) : null,
+              weight: pointsPossible != null ? Math.round(pointsPossible) : null,
+              overallWeight,
               score: submission.score,
-              possible: assignment?.points_possible,
+              possible: pointsPossible,
               status: submission.workflow_state,
               graded: submission.score !== null,
               status_tone: statusFor(daysLeft),
@@ -439,13 +543,6 @@ export default function App() {
             >
               Materials
             </button>
-            <button
-              type="button"
-              className={activeTab === 'overview' ? 'active' : ''}
-              onClick={() => setActiveTab('overview')}
-            >
-              Overview
-            </button>
           </div>
 
           {activeTab === 'assessments' && (
@@ -463,11 +560,22 @@ export default function App() {
                 >
                   <div className="row between">
                     <h4>{assessment.title}</h4>
-                    <strong>{assessment.weight ? `${assessment.weight}%` : '-'}</strong>
+                    <strong>{assessment.overallWeight != null ? `${assessment.overallWeight}%` : '-'}</strong>
                   </div>
                   <p>
                     Due {assessment.dueText}
                     {assessment.daysLeft != null ? ` - ${assessment.daysLeft} days` : ''}
+                  </p>
+                  <p>
+                    {assessment.score != null && assessment.possible != null
+                      ? `Marks ${assessment.score}/${assessment.possible}`
+                      : 'Marks N/A'}
+                    {' | '}
+                    {assessment.overallWeight != null
+                      ? `Overall ${assessment.overallWeight}%`
+                      : assessment.weight != null
+                        ? `Worth ${assessment.weight} pts`
+                        : 'Worth N/A'}
                   </p>
                   <div className="progress-track">
                     <span
@@ -500,16 +608,6 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'overview' && (
-            <article className="callout">
-              <h5>What markers actually want</h5>
-              <ul>
-                {markerNotes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </article>
-          )}
         </section>
       )}
 
@@ -524,16 +622,20 @@ export default function App() {
 
           <section className="sl-stats">
             <article className="stat-card">
-              <strong>{selectedAssessment.weight ? `${selectedAssessment.weight}%` : '-'}</strong>
-              <span>Weight</span>
+              <strong>{selectedAssessment.overallWeight != null ? `${selectedAssessment.overallWeight}%` : '-'}</strong>
+              <span>Overall weight</span>
             </article>
             <article className="stat-card warn">
-              <strong>{selectedAssessment.daysLeft ?? '-'}</strong>
-              <span>Days remaining</span>
+              <strong>
+                {selectedAssessment.score != null && selectedAssessment.possible != null
+                  ? `${selectedAssessment.score}/${selectedAssessment.possible}`
+                  : 'N/A'}
+              </strong>
+              <span>Marks</span>
             </article>
             <article className="stat-card">
-              <strong>{selectedUnit.currentGrade != null ? `${selectedUnit.currentGrade}%` : 'N/A'}</strong>
-              <span>Current grade</span>
+              <strong>{selectedAssessment.daysLeft ?? '-'}</strong>
+              <span>Days remaining</span>
             </article>
           </section>
 
