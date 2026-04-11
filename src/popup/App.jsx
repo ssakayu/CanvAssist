@@ -70,7 +70,7 @@ export default function App() {
         {view === VIEWS.OVERVIEW && (
           <div className="sl-title-row">
             <span className="dot" aria-hidden="true" />
-            <h1>CanvAssist</h1>
+            <h1>CanvAssists</h1>
           </div>
         )}
         {view !== VIEWS.OVERVIEW && (
