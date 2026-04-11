@@ -1,0 +1,242 @@
+.studylens-card {
+  width: 100%;
+  background: rgb(0, 102, 185);
+  border: 1px solid #4b4b4b;
+  border-radius: 26px;
+  padding: 22px 18px 24px;
+  color: #f6efe4;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.brand h1 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot.green {
+  background: #18c58f;
+  box-shadow: 0 0 8px rgba(24, 197, 143, 0.5);
+}
+
+.sync-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: white;
+}
+
+.sync-btn {
+  border-radius: 999px;
+  border: none;
+  background: #18c58f;
+  color: white;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sync-btn:hover {
+  background: #14ae7d;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.stat-box {
+  background: #212121;
+  border-radius: 16px;
+  padding: 18px 10px;
+  text-align: center;
+}
+
+.stat-number {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.stat-number.red   { color: #ef4444; }
+.stat-number.amber { color: #f59e0b; }
+.stat-number.white { color: #f8fafc; }
+
+.stat-label {
+  font-size: 13px;
+  color: #d6d0c7;
+  line-height: 1.3;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: white;
+  margin: 14px 0 12px 4px;
+}
+
+.unit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Most urgent card ── */
+.unit-card-urgent {
+  background: #212121;
+  border: 1px solid white;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 4px;
+  cursor: default;
+}
+
+.urgent-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #9ca3af;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.urgent-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f6efe4;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.urgent-meta {
+  display: inline-block;
+  background: #ef4444;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+/* ── Unit cards ── */
+.unit-card {
+  background: white;
+  border-radius: 18px;
+  padding: 16px 18px;
+  color: rgb(39, 53, 64);
+  cursor: pointer;
+}
+
+.unit-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.unit-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.unit-card-left {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.unit-code {
+  font-size: 17px;
+  font-weight: 700;
+  color: rgb(39, 53, 64);
+}
+
+.unit-name {
+  font-size: 13px;
+  color: rgb(39, 53, 64);
+  line-height: 1.3;
+}
+
+.unit-status {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.unit-status--success { background: #eef7d7; color: #6c8d19; }
+.unit-status--warning { background: #f5ecd8; color: #af7b19; }
+.unit-status--danger  { background: #f8e7eb; color: #bc4a66; }
+.unit-status--unknown { background: #f3f4f6; color: #6b7280; }
+
+.progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.progress-fill.green { background: #18c58f; }
+.progress-fill.red   { background: #ef4444; }
+
+.unit-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(39, 53, 64);
+}
+
+.unit-upcoming {
+  font-size: 12px;
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* ── Debug section ── */
+.debug-section {
+  margin-top: 18px;
+}
+
+.debug-section summary {
+  font-size: 11px;
+  color: rgba(246, 239, 228, 0.6);
+  cursor: pointer;
+  letter-spacing: 0.05em;
+}
+
+.debug-section pre {
+  font-size: 10px;
+  color: rgba(246, 239, 228, 0.8);
+  margin-top: 6px;
+  white-space: pre-wrap;
+}
