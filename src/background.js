@@ -11,7 +11,6 @@ import getAssignments from './api/getAssignments.js'
 import getModules from './api/getModules.js'
 import { saveData, isDataStale, getLastSync, getData } from './lib/storage.js'
 import { addUrgencyScores } from './lib/utils.js'
-// enrichUnit is defined directly here to avoid circular import with ai.js
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 
@@ -41,7 +40,7 @@ chrome.action.onClicked.addListener((tab) => {
 
 // ─── MESSAGE LISTENER ─────────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   console.log('Message received:', msg.type)
 
   if (msg.type === 'SYNC_NOW') {
@@ -62,12 +61,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
 
-  if (msg.type === 'AI_REQUEST') {
-    callOpenAI(msg.prompt, msg.maxTokens)
+  if (msg.type === 'CHAT_MESSAGE') {
+    callOpenAIChat(msg.messages, msg.context)
       .then(result => sendResponse({ success: true, result }))
       .catch(err => sendResponse({ success: false, error: err.message }))
     return true
   }
+
 })
 
 // ─── OPENAI ───────────────────────────────────────────────────────────────────
@@ -109,6 +109,101 @@ async function callOpenAI(prompt, maxTokens = 500) {
   return data.choices[0].message.content.trim()
 }
 
+// ─── CHATBOT ──────────────────────────────────────────────────────────────────
+
+const CHAT_SYSTEM_PROMPT = `You are CanvAssist, a study assistant built into a student's Canvas LMS browser extension at QUT.
+
+Your only job is to help students understand and manage their Canvas coursework based on the data provided.
+
+You can help with:
+- Understanding assessment requirements, rubrics, and marking criteria
+- Explaining due dates, submission status, and what grades mean
+- Clarifying what weekly modules cover and which are relevant to an assessment
+- Study tips and strategies grounded in the student's actual units and deadlines
+- Explaining what a student needs to score to pass or reach a grade threshold
+
+You must not:
+- Write assignment content, essays, code submissions, or exam answers for the student — offer guidance instead
+- Answer questions unrelated to the student's Canvas units or academic study
+- Speculate beyond the data provided (e.g. don't invent marking criteria not in the rubric)
+- Give advice on academic misconduct or plagiarism
+
+If asked something outside your scope, say so in one sentence and redirect to what you can help with.
+Be concise, direct, and practical. No filler phrases.`
+
+async function callOpenAIChat(messages, context) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('No OpenAI API key set — add VITE_OPENAI_API_KEY to .env')
+  }
+
+  const contextText = buildChatContext(context)
+  const systemContent = `${CHAT_SYSTEM_PROMPT}\n\n[STUDENT CONTEXT]\n${contextText}`
+
+  // Cap history to last 10 messages to keep token usage bounded
+  const recentMessages = messages.slice(-10)
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 400,
+      temperature: 0.4,
+      messages: [
+        { role: 'system', content: systemContent },
+        ...recentMessages,
+      ],
+    })
+  })
+
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error?.message || `OpenAI error: ${res.status}`)
+  }
+
+  const data = await res.json()
+  return data.choices[0].message.content.trim()
+}
+
+// Formats whatever context the UI passes into a plain text block for the system prompt.
+// The UI decides what's relevant (current unit, open assessment, etc.) — this just renders it.
+function buildChatContext(context) {
+  if (!context) return 'No unit or assessment context provided.'
+
+  // Pre-formatted context string (e.g. multi-unit overview summary)
+  if (context.rawContext) return context.rawContext
+
+  const parts = []
+
+  if (context.unitCode) {
+    const name = context.unitName ? ` — ${context.unitName}` : ''
+    parts.push(`Unit: ${context.unitCode}${name}`)
+  }
+  if (context.currentGrade !== null && context.currentGrade !== undefined) {
+    parts.push(`Current grade: ${context.currentGrade}%`)
+  }
+  if (context.assessmentName) {
+    const pts = context.pointsPossible ? ` (${context.pointsPossible}pts)` : ''
+    const due = context.dueDate ? `, due ${context.dueDate}` : ''
+    parts.push(`Assessment: ${context.assessmentName}${pts}${due}`)
+  }
+  if (context.assessmentDescription) {
+    parts.push(`Assessment description: ${context.assessmentDescription.slice(0, 300)}`)
+  }
+  if (context.rubricSummary?.length > 0) {
+    parts.push(`Rubric guidance:\n${context.rubricSummary.map(b => `- ${b}`).join('\n')}`)
+  }
+  if (context.relevantModules?.length > 0) {
+    const weeks = context.relevantModules.map(m => `Week ${m.weekNumber} (${m.topic})`).join(', ')
+    parts.push(`Relevant weeks: ${weeks}`)
+  }
+
+  return parts.length > 0 ? parts.join('\n') : 'No specific context provided.'
+}
+
 // ─── AI ENRICHMENT ────────────────────────────────────────────────────────────
 // Two jobs:
 //   1. Decode rubric criteria into plain language bullets (per assessment)
@@ -117,7 +212,7 @@ async function callOpenAI(prompt, maxTokens = 500) {
 async function enrichUnit(unit) {
 
   // ── Step 1: Decode rubrics ─────────────────────────────────────────────────
-  const enrichedAssessments = await Promise.all(
+  let enrichedAssessments = await Promise.all(
     unit.assessments.map(async (assessment) => {
       // Skip if already decoded or no rubric
       if (assessment.aiRubricSummary) return assessment
@@ -160,7 +255,7 @@ Return only the bullet points, one per line, no numbering, no extra commentary.
   )
 
   // ── Step 2: Summarise weekly modules ──────────────────────────────────────
-  const enrichedModules = await Promise.all(
+  let enrichedModules = await Promise.all(
     unit.modules.map(async (module) => {
       // Skip if already summarised
       if (module.aiSummary) return module
@@ -178,10 +273,65 @@ Return only the sentence, nothing else.
     })
   )
 
+  // ── Step 3: Link modules to assessments ───────────────────────────────────
+  // One call per unit — returns a mapping of assessmentId → relevant week numbers
+  // Skip if already linked (unit.relevantModulesLinked set on previous sync)
+  if (!unit.relevantModulesLinked && enrichedAssessments.length > 0 && enrichedModules.length > 0) {
+    console.log(`Linking modules to assessments for ${unit.code}...`)
+
+    const assessmentList = enrichedAssessments
+      .map(a => `- [id:${a.id}] "${a.name}"${a.description ? ': ' + a.description.slice(0, 150) : ''}`)
+      .join('\n')
+
+    const moduleList = enrichedModules
+      .map(m => `- Week ${m.weekNumber}: ${m.topic}`)
+      .join('\n')
+
+    const linkPrompt = `
+A university unit has these assessments:
+${assessmentList}
+
+And these weekly study modules:
+${moduleList}
+
+For each assessment, list the week numbers most relevant for studying and preparing for it.
+Return ONLY a JSON object like: { "assessmentId": [weekNumbers] }
+Only include weeks that are clearly relevant. Use the numeric assessment IDs as keys.
+`
+
+    try {
+      const raw = await callOpenAI(linkPrompt, 400)
+      const cleaned = raw?.replace(/```json\n?/g, '').replace(/```/g, '').trim()
+      const mapping = JSON.parse(cleaned)
+
+      // Populate relevantModules on each assessment
+      enrichedAssessments = enrichedAssessments.map(a => {
+        const weekNums = mapping[String(a.id)] || []
+        const relevantModules = enrichedModules
+          .filter(m => weekNums.includes(m.weekNumber))
+          .map(m => ({ weekNumber: m.weekNumber, topic: m.topic }))
+        return { ...a, relevantModules }
+      })
+
+      // Invert: populate relevantAssessments on each module
+      enrichedModules = enrichedModules.map(m => {
+        const relevantAssessments = enrichedAssessments
+          .filter(a => a.relevantModules.some(rm => rm.weekNumber === m.weekNumber))
+          .map(a => a.name)
+        return { ...m, relevantAssessments }
+      })
+
+      console.log(`${unit.code} module linking complete ✅`)
+    } catch (err) {
+      console.error(`Failed to link modules for ${unit.code}:`, err.message)
+    }
+  }
+
   return {
     ...unit,
     assessments: enrichedAssessments,
     modules: enrichedModules,
+    relevantModulesLinked: true,
   }
 }
 

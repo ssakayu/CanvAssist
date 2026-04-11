@@ -1,7 +1,6 @@
-// src/components/views/AssessmentDetail.jsx
-import { useState, useEffect } from "react"
-import { getUnit } from "../../lib/storage.js"
-import { projectGrade, calculateCurrentGrade, getUrgencyLabel, getUrgencyColor } from "../../lib/utils.js"
+import { useState, useEffect } from 'react'
+import { getUnit } from '../../lib/storage.js'
+import { projectGrade, calculateCurrentGrade } from '../../lib/utils.js'
 
 export default function AssessmentDetail({ assessment: initialAssessment, unit: initialUnit }) {
   const [assessment, setAssessment] = useState(initialAssessment)
@@ -10,7 +9,6 @@ export default function AssessmentDetail({ assessment: initialAssessment, unit: 
 
   useEffect(() => {
     let cancelled = false
-
     async function loadFresh() {
       const fresh = await getUnit(initialUnit.id)
       if (!fresh || cancelled) return
@@ -18,172 +16,127 @@ export default function AssessmentDetail({ assessment: initialAssessment, unit: 
       if (freshAssessment) setAssessment(freshAssessment)
       setUnit(fresh)
     }
-
     loadFresh()
-
     const handleMessage = (msg) => {
       if (['AI_UNIT_COMPLETE', 'AI_COMPLETE'].includes(msg.type)) loadFresh()
     }
     chrome.runtime.onMessage.addListener(handleMessage)
-    return () => {
-      cancelled = true
-      chrome.runtime.onMessage.removeListener(handleMessage)
-    }
+    return () => { cancelled = true; chrome.runtime.onMessage.removeListener(handleMessage) }
   }, [initialAssessment.id])
 
   const grade = unit.currentGrade ?? calculateCurrentGrade(unit.assessments)
   const projected = projectGrade(unit.assessments, assessment.id, whatIfScore)
-  const passThreshold = 50
-
-  const urgencyColor = getUrgencyColor(assessment.daysUntilDue)
-  const urgencyValueClass = `canvAssist-info-value ${
-    urgencyColor === 'red' ? 'canvAssist-info-value--red'
-    : urgencyColor === 'amber' ? 'canvAssist-info-value--amber'
-    : 'canvAssist-info-value--green'
-  }`
 
   return (
-    <div className='canvAssist-body'>
+    <div>
+      {/* ── Assessment fields ── */}
+      <section style={{ marginBottom: 10 }}>
+        <strong>ASSESSMENT</strong>
+        <pre>
+{`id           : ${assessment.id}
+name         : ${assessment.name}
+dueAt        : ${assessment.dueAt ?? '—'}
+daysUntilDue : ${assessment.daysUntilDue ?? '—'}
+points       : ${assessment.pointsPossible}
+urgencyScore : ${assessment.urgencyScore ?? '—'}
+gradingType  : ${assessment.gradingType}
+htmlUrl      : ${assessment.htmlUrl ?? '—'}
+sub.status   : ${assessment.submission?.status ?? '—'}
+sub.score    : ${assessment.submission?.score ?? '—'}
+sub.late     : ${assessment.submission?.late ?? false}
+sub.missing  : ${assessment.submission?.missing ?? false}
+sub.attempt  : ${assessment.submission?.attempt ?? '—'}
+sub.submitted: ${assessment.submission?.submittedAt ?? '—'}
+sub.graded   : ${assessment.submission?.gradedAt ?? '—'}`}
+        </pre>
+        {assessment.description && (
+          <>
+            <strong>description:</strong>
+            <p style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>{assessment.description}</p>
+          </>
+        )}
+      </section>
 
-      {/* Breadcrumb */}
-      <div className='canvAssist-breadcrumb'>
-        <span>{unit.code}</span>
-        <span className='canvAssist-breadcrumb-sep'>›</span>
-        <span style={{ color: '#111827' }}>
-          {assessment.name.length > 35 ? assessment.name.slice(0, 35) + '...' : assessment.name}
-        </span>
-      </div>
+      {/* ── Grade context ── */}
+      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
+        <strong>GRADE CONTEXT</strong>
+        <pre>
+{`unit currentGrade : ${grade ?? '—'}%
+unit code         : ${unit.code}`}
+        </pre>
+      </section>
 
-      {/* Info grid */}
-      <div className='canvAssist-info-grid'>
-        <div className='canvAssist-info-card'>
-          <span className='canvAssist-info-value'>{assessment.pointsPossible}pts</span>
-          <span className='canvAssist-info-label'>Worth</span>
-        </div>
-        <div className='canvAssist-info-card'>
-          <span className={urgencyValueClass}>{getUrgencyLabel(assessment.daysUntilDue)}</span>
-          <span className='canvAssist-info-label'>Due</span>
-        </div>
-        <div className='canvAssist-info-card'>
-          <span className='canvAssist-info-value'>{grade !== null ? `${grade}%` : '—'}</span>
-          <span className='canvAssist-info-label'>Current grade</span>
-        </div>
-        <div className='canvAssist-info-card'>
-          <span className='canvAssist-info-value'>
-            {assessment.submission?.status === 'graded'
-              ? `${assessment.submission.score ?? '—'}pts`
-              : assessment.submission?.status === 'submitted'
-                ? 'Submitted'
-                : 'Not submitted'
-            }
-          </span>
-          <span className='canvAssist-info-label'>Submission</span>
-        </div>
-      </div>
+      {/* ── Rubric (raw) ── */}
+      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
+        <strong>RUBRIC (raw) — hasRubric: {String(assessment.hasRubric)}</strong>
+        {assessment.hasRubric ? (
+          assessment.rubric.map(c => (
+            <div key={c.id} style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid #999' }}>
+              <pre>
+{`criterion : ${c.description}
+points    : ${c.points}
+longDesc  : ${c.longDescription || '—'}`}
+              </pre>
+              {c.ratings.map(r => (
+                <pre key={r.id} style={{ marginLeft: 8 }}>
+{`  rating: ${r.description} (${r.points}pts)
+  desc  : ${r.longDescription || '—'}`}
+                </pre>
+              ))}
+            </div>
+          ))
+        ) : (
+          <p>No rubric</p>
+        )}
+      </section>
 
-      {/* Meta tags */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, color: '#6b7280' }}>Due {assessment.dueDateFormatted}</span>
-        {assessment.submission?.late && <span className='canvAssist-meta-tag canvAssist-meta-tag--late'>Late</span>}
-        {assessment.submission?.missing && <span className='canvAssist-meta-tag canvAssist-meta-tag--missing'>Missing</span>}
-      </div>
+      {/* ── AI rubric summary ── */}
+      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
+        <strong>AI RUBRIC SUMMARY — {assessment.aiRubricSummary ? `${assessment.aiRubricSummary.length} bullets` : 'not generated'}</strong>
+        {assessment.aiRubricSummary ? (
+          <ol style={{ paddingLeft: 16, marginTop: 4 }}>
+            {assessment.aiRubricSummary.map((b, i) => <li key={i}>{b}</li>)}
+          </ol>
+        ) : (
+          <p>—</p>
+        )}
+      </section>
 
-      <div className='canvAssist-divider' />
-
-      {/* What markers want */}
-      <div className='canvAssist-section-hdr'>What markers want</div>
-
-      {assessment.aiRubricSummary ? (
-        <div>
-          <span className='canvAssist-ai-badge'>AI decoded</span>
-          <ul className='canvAssist-ai-list'>
-            {assessment.aiRubricSummary.map((bullet, i) => (
-              <li key={i} className='canvAssist-ai-item'>{bullet}</li>
+      {/* ── Relevant modules ── */}
+      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
+        <strong>RELEVANT MODULES — {assessment.relevantModules?.length ? assessment.relevantModules.length : 'none'}</strong>
+        {assessment.relevantModules?.length > 0 ? (
+          <ul style={{ paddingLeft: 16, marginTop: 4 }}>
+            {assessment.relevantModules.map(m => (
+              <li key={m.weekNumber}>Week {m.weekNumber}: {m.topic}</li>
             ))}
           </ul>
+        ) : (
+          <p>—</p>
+        )}
+      </section>
+
+      {/* ── Grade what-if ── */}
+      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8 }}>
+        <strong>GRADE WHAT-IF</strong>
+        <div style={{ marginTop: 4 }}>
+          <label>
+            if I score {whatIfScore}% on this:
+            <input
+              type='range' min={0} max={100} step={1}
+              value={whatIfScore}
+              onChange={e => setWhatIfScore(Number(e.target.value))}
+              style={{ marginLeft: 8 }}
+            />
+          </label>
         </div>
-      ) : assessment.hasRubric ? (
-        <RawRubric rubric={assessment.rubric} />
-      ) : (
-        <p style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>
-          {assessment.description || 'No rubric or description available.'}
-        </p>
-      )}
-
-      <div className='canvAssist-divider' />
-
-      {/* Grade what-if */}
-      <div className='canvAssist-section-hdr'>Grade what-if</div>
-
-      <div className='canvAssist-slider-label'>
-        <span>If I score {whatIfScore}% on this assessment</span>
-      </div>
-      <input
-        type='range'
-        min={0}
-        max={100}
-        step={1}
-        value={whatIfScore}
-        onChange={e => setWhatIfScore(Number(e.target.value))}
-        className='canvAssist-grade-slider'
-      />
-
-      <div className='canvAssist-calc-results'>
-        <div className='canvAssist-calc-row'>
-          <span className='canvAssist-calc-label'>Current overall</span>
-          <span className='canvAssist-calc-value'>{grade !== null ? `${grade}%` : '—'}</span>
-        </div>
-        <div className='canvAssist-calc-row'>
-          <span className='canvAssist-calc-label'>Projected overall</span>
-          <span className={`canvAssist-calc-value ${projected >= passThreshold ? 'canvAssist-calc-value--pass' : 'canvAssist-calc-value--fail'}`}>
-            {projected !== null ? `${projected}%` : '—'}
-          </span>
-        </div>
-        <div className='canvAssist-calc-row'>
-          <span className='canvAssist-calc-label'>To pass this unit</span>
-          <span className='canvAssist-calc-value'>Need 50%+</span>
-        </div>
-      </div>
-
-      {projected !== null && (
-        <p className={`canvAssist-calc-message canvAssist-calc-message--${projected >= passThreshold ? 'pass' : 'fail'}`}>
-          {projected >= 85
-            ? 'Looking great — on track for Distinction.'
-            : projected >= 65
-              ? 'On track — keep it up.'
-              : projected >= passThreshold
-                ? 'Passing but tight — worth putting in more effort.'
-                : "Below passing — you'll need to score higher to pass this unit."
-          }
-        </p>
-      )}
-
-    </div>
-  )
-}
-
-function RawRubric({ rubric }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {rubric?.map(criterion => (
-        <div key={criterion.id} style={{ border: '0.5px solid #e5e7eb', borderRadius: 8, padding: '9px 12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: '#111827' }}>{criterion.description}</span>
-            <span style={{ fontSize: 11, color: '#9ca3af' }}>{criterion.points}pts</span>
-          </div>
-          {criterion.ratings?.map(rating => (
-            <div key={rating.id} style={{ padding: '5px 0', borderTop: '0.5px solid #f3f4f6' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                <span style={{ fontSize: 11, fontWeight: 500, color: '#374151' }}>{rating.description}</span>
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>{rating.points}pts</span>
-              </div>
-              {rating.longDescription && (
-                <p style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5 }}>{rating.longDescription}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      ))}
+        <pre>
+{`currentGrade  : ${grade ?? '—'}%
+projectedGrade: ${projected ?? '—'}%
+pass threshold: 50%
+result        : ${projected === null ? '—' : projected >= 50 ? 'PASS' : 'FAIL'}`}
+        </pre>
+      </section>
     </div>
   )
 }

@@ -1,106 +1,69 @@
-// src/components/views/Overview.jsx
-import { useGlobal } from "../../context/GlobalContext"
-import { getRankedAssessments, calculateCurrentGrade, getUnitStatus, getStatusLabel } from "../../lib/utils.js"
+import { useGlobal } from '../../context/GlobalContext'
+import { getRankedAssessments, calculateCurrentGrade } from '../../lib/utils.js'
 
 export default function Overview() {
   const { activeCourses, setView } = useGlobal()
 
-  const allAssessments = getRankedAssessments(activeCourses)
-  const dueThisWeek = allAssessments.filter(
-    a => a.daysUntilDue !== null && a.daysUntilDue >= 0 && a.daysUntilDue <= 7
-  )
-  const mostUrgent = allAssessments[0] ?? null
-
   if (activeCourses.length === 0) {
-    return (
-      <div className='canvAssist-body'>
-        <div className='canvAssist-empty'>
-          No data yet — click ↻ to sync Canvas
-        </div>
-      </div>
-    )
+    return <p>No data — click ↻ sync</p>
   }
 
+  const allAssessments = getRankedAssessments(activeCourses)
+  const dueThisWeek = allAssessments.filter(a => a.daysUntilDue !== null && a.daysUntilDue >= 0 && a.daysUntilDue <= 7)
+
   return (
-    <div className='canvAssist-body'>
-      <div className='canvAssist-stats'>
-        <div className='canvAssist-stat'>
-          <span className={`canvAssist-stat-value ${dueThisWeek.length > 0 ? 'canvAssist-stat-value--red' : ''}`}>
-            {dueThisWeek.length}
-          </span>
-          <span className='canvAssist-stat-label'>Due this week</span>
-        </div>
-        <div className='canvAssist-stat'>
-          <span className={`canvAssist-stat-value ${mostUrgent?.daysUntilDue <= 3 ? 'canvAssist-stat-value--amber' : ''}`}>
-            {mostUrgent?.daysUntilDue !== null && mostUrgent?.daysUntilDue !== undefined ? `${mostUrgent.daysUntilDue}d` : '—'}
-          </span>
-          <span className='canvAssist-stat-label'>Most urgent</span>
-        </div>
-        <div className='canvAssist-stat'>
-          <span className='canvAssist-stat-value canvAssist-stat-value--white'>
-            {activeCourses.length}
-          </span>
-          <span className='canvAssist-stat-label'>Active units</span>
-        </div>
-      </div>
+    <div>
+      {/* ── Stats ── */}
+      <section style={{ marginBottom: 12 }}>
+        <strong>STATS</strong>
+        <pre>
+{`due this week : ${dueThisWeek.length}
+active units  : ${activeCourses.length}
+total assessed: ${allAssessments.length}`}
+        </pre>
+      </section>
 
-      <p className='canvAssist-section-label'>Your units</p>
+      {/* ── Ranked assessments ── */}
+      <section style={{ marginBottom: 12 }}>
+        <strong>ALL ASSESSMENTS (ranked by urgency)</strong>
+        <ol style={{ paddingLeft: 16, marginTop: 4 }}>
+          {allAssessments.map(a => (
+            <li key={a.id} style={{ marginBottom: 4 }}>
+              <span>[{a.unitCode}] {a.name}</span>
+              <pre style={{ marginLeft: 8 }}>
+{`  urgencyScore : ${a.urgencyScore ?? '—'}
+  daysUntilDue : ${a.daysUntilDue ?? '—'}
+  points       : ${a.pointsPossible}
+  status       : ${a.submission?.status ?? '—'}`}
+              </pre>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-      <ul className='canvAssist-units'>
-        {activeCourses.map(course => (
-          <UnitCard
-            key={course.id}
-            course={course}
-            onSelect={() => setView({ page: 'unit', params: { unitId: course.id, unitCode: course.code, unit: course } })}
-          />
-        ))}
-      </ul>
+      {/* ── Units ── */}
+      <section>
+        <strong>UNITS</strong>
+        {activeCourses.map(course => {
+          const grade = course.currentGrade ?? calculateCurrentGrade(course.assessments)
+          return (
+            <div key={course.id} style={{ border: '1px solid #ccc', padding: 6, marginTop: 6 }}>
+              <pre>
+{`id           : ${course.id}
+code         : ${course.code}
+name         : ${course.friendlyName}
+currentGrade : ${grade ?? '—'}%
+assessments  : ${course.assessments?.length ?? 0}
+modules      : ${course.modules?.length ?? 0}
+aiLinked     : ${course.relevantModulesLinked ?? false}`}
+              </pre>
+              <button onClick={() => setView({ page: 'unit', params: { unitId: course.id, unitCode: course.code, unit: course } })}>
+                → open unit
+              </button>
+            </div>
+          )
+        })}
+      </section>
     </div>
-  )
-}
-
-function UnitCard({ course, onSelect }) {
-  const grade = course.currentGrade ?? calculateCurrentGrade(course.assessments)
-  const status = getUnitStatus(grade)
-  const statusLabel = getStatusLabel(status)
-
-  const upcomingCount = course.assessments?.filter(
-    a => a.daysUntilDue !== null && a.daysUntilDue >= 0 && a.daysUntilDue <= 14
-  ).length ?? 0
-
-  const badgeClass =
-    status === 'at_risk' ? 'canvAssist-badge canvAssist-badge--risk'
-    : status === 'borderline' ? 'canvAssist-badge canvAssist-badge--soon'
-    : 'canvAssist-badge canvAssist-badge--ok'
-
-  const barClass =
-    status === 'at_risk' ? 'canvAssist-bar-fill canvAssist-bar-fill--red'
-    : status === 'borderline' ? 'canvAssist-bar-fill canvAssist-bar-fill--amber'
-    : 'canvAssist-bar-fill canvAssist-bar-fill--green'
-
-  const footerRight =
-    status === 'distinction' ? 'Distinction range'
-    : status === 'on_track' ? 'On track'
-    : status === 'borderline' ? 'Watch this'
-    : status === 'at_risk' ? 'Need 50%+ to pass'
-    : 'No grades yet'
-
-  return (
-    <li className='canvAssist-unit' onClick={onSelect}>
-      <div className='canvAssist-unit-top'>
-        <span className='canvAssist-unit-code'>{course.code}</span>
-        <span className={badgeClass}>
-          {upcomingCount > 0 ? `${upcomingCount} due soon` : statusLabel}
-        </span>
-      </div>
-      <p className='canvAssist-unit-name'>{course.friendlyName}</p>
-      <div className='canvAssist-bar'>
-        <div className={barClass} style={{ width: `${Math.min(100, Math.max(0, grade ?? 0))}%` }} />
-      </div>
-      <div className='canvAssist-unit-footer'>
-        <span>Current grade: <strong>{grade !== null ? `${grade}%` : '—'}</strong></span>
-        <span>{footerRight}</span>
-      </div>
-    </li>
   )
 }
