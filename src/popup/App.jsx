@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import getActiveCourses from "./getActiveCourses";
 import "./App.css";
 
 const units = [
@@ -45,7 +47,7 @@ const units = [
 
 export default function StudyLens() {
   return (
-    
+    <div className="phone-shell">
       <div className="studylens-card">
         <div className="topbar">
           <div className="brand">
@@ -54,37 +56,49 @@ export default function StudyLens() {
           </div>
 
           <div className="sync-pill">
-            <span className="dot green"></span>
-            Synced 3m ago
+            <span className="dot green">{formatLastSync(lastSync)}</span>
+            <button className='sync-btn' onClick={handleSync}>Sync Canvas data</button>
+            
           </div>
         </div>
 
         <div className="stats-grid">
           <div className="stat-box">
-            <div className="stat-number red">3</div>
+            <div className="stat-number red">{dueThisWeek.length}</div>
             <div className="stat-label">Due this week</div>
           </div>
 
           <div className="stat-box">
-            <div className="stat-number amber">2</div>
+            <div className="stat-number amber">{mostUrgent ? `${mostUrgent.daysUntilDue}d` : '—'}</div>
             <div className="stat-label">Days to urgent</div>
           </div>
 
           <div className="stat-box">
-            <div className="stat-number white">4</div>
+            <div className="stat-number white">{units.length}</div>
             <div className="stat-label">Active units</div>
           </div>
         </div>
+
+              {/* Most urgent assessment callout */}
+        {mostUrgent && (
+        <div className='urgent-callout'>
+          <span className='urgent-label'>Most urgent</span>
+          <span className='urgent-name'>{mostUrgent.name}</span>
+          <span className='urgent-meta'>
+            {mostUrgent.unitCode} · Due {mostUrgent.dueDateFormatted} · {mostUrgent.pointsPossible}pts
+          </span>
+        </div>
+        )}  
 
         <div className="section-title">YOUR UNITS</div>
 
         <div className="unit-list">
           {units.map((unit) => (
-            <div key={unit.code} className="unit-card">
+            <div key={unit.id} className="unit-card">
               <div className="unit-header">
-                <div>
-                  <div className="unit-code">{unit.code}</div>
-                  <div className="unit-name">{unit.name}</div>
+                <div >
+                  <div className="unit-code">{unit.id}</div>
+                  <div className="unit-name" onClick={() => onSelectUnit(unit)}>{unit}</div>
                 </div>
 
                 <span className={`status-pill ${unit.statusType}`}>
@@ -107,6 +121,6 @@ export default function StudyLens() {
           ))}
         </div>
       </div>
-    
+    </div>
   );
 }
