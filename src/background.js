@@ -3,6 +3,7 @@
 // Responsible for:
 //   1. Syncing Canvas data and storing it locally
 //   2. Handling OpenAI API calls (side panel can't call OpenAI directly due to CORS)
+//   3. AI enrichment — rubric decoding and week summaries
 // This file has access to chrome APIs but NOT to the DOM
 
 import getActiveCourses from './api/getActiveCourses.js'
@@ -10,51 +11,39 @@ import getAssignments from './api/getAssignments.js'
 import getModules from './api/getModules.js'
 import { saveData, isDataStale, getLastSync, getData } from './lib/storage.js'
 import { addUrgencyScores } from './lib/utils.js'
+// enrichUnit is defined directly here to avoid circular import with ai.js
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 
 // ─── KEEP ALIVE ───────────────────────────────────────────────────────────────
-// Chrome kills service workers after ~30s of inactivity
-// Alarms keep it alive so AI calls don't fail mid-enrichment
 
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('CanvAssist installed — starting initial sync...')
-
-  // Set up alarm to keep service worker alive
   chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 })
-
   await syncCanvasData(true)
 })
 
-// Re-create alarm on startup (survives Chrome restarts)
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 })
 })
 
-// Alarm fires every 24 seconds — just enough to keep service worker alive
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'keepAlive') {
-    // Just needs to run something to stay alive
     chrome.storage.local.get('ping', () => {})
   }
 })
 
 // ─── LIFECYCLE ────────────────────────────────────────────────────────────────
 
-// Opens side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ tabId: tab.id })
 })
 
 // ─── MESSAGE LISTENER ─────────────────────────────────────────────────────────
-// Listens for messages from the side panel
-// Side panel can't call Canvas API or OpenAI directly due to CORS
-// so it asks background.js to do it instead
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   console.log('Message received:', msg.type)
 
-  // Side panel asks for a manual sync — always force it
   if (msg.type === 'SYNC_NOW') {
     syncCanvasData(true)
       .then(() => sendResponse({ success: true }))
@@ -62,7 +51,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
 
-  // Side panel asks if data is ready
   if (msg.type === 'GET_STATUS') {
     getLastSync().then(lastSync => {
       sendResponse({
@@ -74,8 +62,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
 
-  // Side panel asks for an AI completion
-  // All OpenAI calls are routed through here to avoid CORS
   if (msg.type === 'AI_REQUEST') {
     callOpenAI(msg.prompt, msg.maxTokens)
       .then(result => sendResponse({ success: true, result }))
@@ -84,63 +70,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 })
 
-// Runs AI enrichment for one unit
-// Defined here instead of ai.js to avoid circular import issues
-async function enrichUnit(unit) {
-  const enrichedAssessments = await Promise.all(
-    unit.assessments.map(async (assessment) => {
-      if (assessment.aiRubricSummary) return assessment
-      if (!assessment.hasRubric) return assessment
-
-      console.log(`Decoding rubric for ${assessment.name}...`)
-
-      const rubricText = assessment.rubric.map(c => {
-        const ratings = c.ratings.map(r => `  - ${r.description} (${r.points}pts): ${r.longDescription}`).join('\n')
-        return `Criterion: ${c.description} (${c.points}pts)\n${ratings}`
-      }).join('\n\n')
-
-      const prompt = `
-This is the marking rubric for "${assessment.name}".
-${rubricText}
-Give the student 4-5 plain language bullet points explaining what markers want and how to get a Distinction.
-Write each as one sentence starting with an action verb. No jargon. No numbering. One per line.`
-
-      const aiRubricSummary = await callOpenAI(prompt, 400)
-        .then(r => r?.split('\n').map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(l => l.length > 0))
-        .catch(() => null)
-
-      return { ...assessment, aiRubricSummary }
-    })
-  )
-
-  const enrichedModules = await Promise.all(
-    unit.modules.map(async (module) => {
-      if (module.aiSummary) return module
-
-      const titles = module.items.map(i => i.title).join(', ')
-      const prompt = `Canvas module "${module.fullName}" contains: ${titles}. Write ONE sentence (max 20 words) summarising what topics this week covers. Return only the sentence.`
-
-      const aiSummary = await callOpenAI(prompt, 100).catch(() => null)
-
-      const relevantAssessments = []
-      for (const assessment of unit.assessments) {
-        const prompt = `Assessment: "${assessment.name}". Module topic: "${module.topic}". Is this module directly relevant to this assessment? Answer only yes or no.`
-        const response = await callOpenAI(prompt, 5).catch(() => null)
-        if (response?.toLowerCase().includes('yes')) {
-          relevantAssessments.push(assessment.name)
-        }
-      }
-
-      return { ...module, aiSummary, relevantAssessments }
-    })
-  )
-
-  return { ...unit, assessments: enrichedAssessments, modules: enrichedModules }
-}
-
-
 // ─── OPENAI ───────────────────────────────────────────────────────────────────
-// All AI calls go through here — background service worker bypasses CORS
 
 async function callOpenAI(prompt, maxTokens = 500) {
   if (!OPENAI_API_KEY) {
@@ -179,9 +109,83 @@ async function callOpenAI(prompt, maxTokens = 500) {
   return data.choices[0].message.content.trim()
 }
 
+// ─── AI ENRICHMENT ────────────────────────────────────────────────────────────
+// Two jobs:
+//   1. Decode rubric criteria into plain language bullets (per assessment)
+//   2. Summarise what each weekly module covers (per module)
+
+async function enrichUnit(unit) {
+
+  // ── Step 1: Decode rubrics ─────────────────────────────────────────────────
+  const enrichedAssessments = await Promise.all(
+    unit.assessments.map(async (assessment) => {
+      // Skip if already decoded or no rubric
+      if (assessment.aiRubricSummary) return assessment
+      if (!assessment.hasRubric) return assessment
+
+      console.log(`Decoding rubric for ${assessment.name}...`)
+
+      const rubricText = assessment.rubric.map(c => {
+        const ratings = c.ratings
+          .map(r => `  - ${r.description} (${r.points}pts): ${r.longDescription}`)
+          .join('\n')
+        return `Criterion: ${c.description} (${c.points}pts)\n${ratings}`
+      }).join('\n\n')
+
+      const rubricPrompt = `
+This is the marking rubric for a university assignment called "${assessment.name}".
+
+${rubricText}
+
+Give the student 4-5 plain language bullet points explaining:
+- What markers are actually looking for
+- What specifically separates a Distinction from a Pass
+- What's the easiest way to lose marks
+
+Write each bullet point as one clear sentence starting with an action verb.
+Do not use academic jargon. Write like you're explaining to a friend.
+Return only the bullet points, one per line, no numbering, no extra commentary.
+`
+
+      const aiRubricSummary = await callOpenAI(rubricPrompt, 400)
+        .then(r => r
+          ?.split('\n')
+          .map(l => l.replace(/^[-•*]\s*/, '').trim())
+          .filter(l => l.length > 0)
+        )
+        .catch(() => null)
+
+      return { ...assessment, aiRubricSummary }
+    })
+  )
+
+  // ── Step 2: Summarise weekly modules ──────────────────────────────────────
+  const enrichedModules = await Promise.all(
+    unit.modules.map(async (module) => {
+      // Skip if already summarised
+      if (module.aiSummary) return module
+
+      const titles = module.items.map(i => i.title).join(', ')
+      const summaryPrompt = `
+Canvas module "${module.fullName}" contains: ${titles}.
+Write ONE sentence (max 20 words) summarising what specific topics this week covers.
+Be precise — not just "this week covers the lecture material".
+Return only the sentence, nothing else.
+`
+
+      const aiSummary = await callOpenAI(summaryPrompt, 100).catch(() => null)
+      return { ...module, aiSummary }
+    })
+  )
+
+  return {
+    ...unit,
+    assessments: enrichedAssessments,
+    modules: enrichedModules,
+  }
+}
+
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
-// Main sync function — fetches all Canvas data, saves to storage, then enriches with AI
-// force = true skips the staleness check (used for manual syncs)
 
 async function syncCanvasData(force = false) {
   try {
@@ -195,7 +199,6 @@ async function syncCanvasData(force = false) {
     console.log('Starting Canvas sync...')
     notifySidePanel({ type: 'SYNC_STARTED' })
 
-    // Step 1 — get all real semester units
     const courses = await getActiveCourses()
     console.log(`Found ${courses.length} units:`, courses.map(c => c.code))
 
@@ -203,7 +206,6 @@ async function syncCanvasData(force = false) {
       throw new Error('No Canvas units found — make sure you are logged into Canvas')
     }
 
-    // Step 2 — fetch assignments and modules for each unit in parallel
     const units = await Promise.all(
       courses.map(async (course) => {
         try {
@@ -220,16 +222,12 @@ async function syncCanvasData(force = false) {
       })
     )
 
-    // Step 3 — add urgency scores
     const unitsWithScores = addUrgencyScores(units)
 
-    // Step 4 — save Canvas data immediately so UI can render
     await saveData(unitsWithScores)
     console.log('Canvas sync complete ✅', unitsWithScores.length, 'units saved')
     notifySidePanel({ type: 'SYNC_COMPLETE' })
 
-    // Step 5 — AI enrichment runs after UI is already showing data
-    // Intentionally separate so the UI doesn't wait for AI
     console.log('Starting AI enrichment...')
     notifySidePanel({ type: 'AI_STARTED' })
 
@@ -237,7 +235,6 @@ async function syncCanvasData(force = false) {
       try {
         const enriched = await enrichUnit(unit)
 
-        // Save enriched unit back into storage without overwriting others
         const currentData = await getData()
         const updatedUnits = currentData.units.map(u =>
           u.id === enriched.id ? enriched : u

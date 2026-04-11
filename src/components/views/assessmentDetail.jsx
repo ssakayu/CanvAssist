@@ -42,10 +42,6 @@ export default function AssessmentDetail({ assessment: initialAssessment, unit: 
     : 'canvAssist-info-value--green'
   }`
 
-  const relevantModules = unit.modules?.filter(
-    m => m.relevantAssessments?.includes(assessment.name)
-  ) ?? []
-
   return (
     <div className='canvAssist-body'>
 
@@ -112,35 +108,6 @@ export default function AssessmentDetail({ assessment: initialAssessment, unit: 
         <p style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>
           {assessment.description || 'No rubric or description available.'}
         </p>
-      )}
-
-      <div className='canvAssist-divider' />
-
-      {/* Relevant materials */}
-      <div className='canvAssist-section-hdr'>Relevant materials</div>
-
-      {relevantModules.length > 0 ? (
-        <div>
-          {relevantModules.map(module => (
-            <div key={module.id} className='canvAssist-mat-row'>
-              <span className='canvAssist-mat-week'>Wk {module.weekNumber}</span>
-              <div>
-                <div className='canvAssist-mat-title'>{module.topic}</div>
-                {module.aiSummary && <div className='canvAssist-mat-desc'>{module.aiSummary}</div>}
-                <span className='canvAssist-mat-tag'>Relevant to this assessment</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div>
-          {unit.modules?.map(module => (
-            <div key={module.id} className='canvAssist-mat-row'>
-              <span className='canvAssist-mat-week'>Wk {module.weekNumber}</span>
-              <div className='canvAssist-mat-title'>{module.topic}</div>
-            </div>
-          ))}
-        </div>
       )}
 
       <div className='canvAssist-divider' />
