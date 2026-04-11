@@ -153,8 +153,20 @@ async function requestCanvasSnapshotFromPage(tabId) {
 
       // Fetch active enrolled courses for this semester
       const coursesRaw = await requestData('/api/v1/courses?enrollment_state=active&include[]=total_scores&per_page=100')
+      let preferredCourses = coursesRaw
+
+      try {
+        const favoriteCourses = await requestData('/api/v1/users/self/favorites/courses?per_page=100')
+        const favoriteIds = new Set((favoriteCourses || []).map((course) => String(course.id)))
+        if (favoriteIds.size) {
+          const favoriteOnly = coursesRaw.filter((course) => favoriteIds.has(String(course.id)))
+          if (favoriteOnly.length) preferredCourses = favoriteOnly
+        }
+      } catch {
+        // Keep using active courses when favorites endpoint is unavailable.
+      }
       
-      const units = coursesRaw.map((course) => {
+      const units = preferredCourses.map((course) => {
         const code = extractCode(course)
         const enrollment = course.enrollments?.[0]
         return {
@@ -257,11 +269,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('assessments')
   const [view, setView] = useState(VIEWS.OVERVIEW)
   const [isLoading, setIsLoading] = useState(true)
-        const firstUnit = groupByUnit(result.snapshot)?.[0]
-        setSelectedUnitCode(firstUnit?.code || '')
-        setSelectedAssessmentId(firstUnit?.assessments?.[0]?.id || '')
+  const [error, setError] = useState('')
 
-  const selectedUnit = units.find((unit) => unit.code === selectedUnitCode) ?? units[0]
+  const units = useMemo(() => groupByUnit(snapshot), [snapshot])
+  const stats = useMemo(() => computeStats(units), [units])
+
+  const selectedUnit = units.find((unit) => unit.code === selectedUnitCode) ?? units[0] ?? null
   const selectedAssessment =
     selectedUnit?.assessments.find((assessment) => assessment.id === selectedAssessmentId) ??
     selectedUnit?.assessments[0] ??

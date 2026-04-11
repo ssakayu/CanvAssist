@@ -214,7 +214,20 @@ export async function buildStudyLensSnapshot() {
 
   try {
     const coursesRaw = await fetchCanvasJson('/api/v1/courses?enrollment_state=active&include[]=total_scores&per_page=100')
-    const courses = coursesRaw.map(mapCourse)
+    let preferredCourses = coursesRaw
+
+    try {
+      const favoriteCourses = await fetchCanvasJson('/api/v1/users/self/favorites/courses?per_page=100')
+      const favoriteIds = new Set((favoriteCourses || []).map((course) => String(course.id)))
+      if (favoriteIds.size) {
+        const favoriteOnly = coursesRaw.filter((course) => favoriteIds.has(String(course.id)))
+        if (favoriteOnly.length) preferredCourses = favoriteOnly
+      }
+    } catch {
+      // Keep using active courses when favorites endpoint is unavailable.
+    }
+
+    const courses = preferredCourses.map(mapCourse)
 
     const assignmentGroups = await Promise.all(courses.map((course) => fetchAssignmentsForCourse(course)))
     const materialGroups = await Promise.all(courses.map((course) => fetchMaterialsForCourse(course)))
