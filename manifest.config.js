@@ -11,7 +11,11 @@ export default defineManifest({
   permissions: [
     'sidePanel',
     'contentSettings',
+    'storage',
+    'tabs',
+    'scripting',
   ],
+  host_permissions: ['https://canvas.qut.edu.au/*'],
   action: {
     default_icon: {
       48: 'public/logo.png',
@@ -20,7 +24,7 @@ export default defineManifest({
   },
   content_scripts: [{
     js: ['src/content/main.jsx'],
-    matches: ['https://*/*'],
+    matches: ['https://canvas.qut.edu.au/*'],
   }],
   side_panel: {
     default_path: 'src/sidepanel/index.html',

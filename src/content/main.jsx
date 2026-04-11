@@ -1,14 +1,37 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import App from './views/App.jsx'
+import { buildStudyLensSnapshot } from './scrapeQut'
 
-console.log('[CRXJS] Hello world from content script!')
+const MESSAGE_TYPES = {
+  SCRAPE: 'STUDYLENS_SCRAPE',
+}
 
-const container = document.createElement('div')
-container.id = 'crxjs-app'
-document.body.appendChild(container)
-createRoot(container).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+function isCanvasPage() {
+  const isQutCanvas = location.hostname === 'canvas.qut.edu.au'
+  const isAllowedPath = location.pathname === '/' || location.pathname.startsWith('/courses')
+  return isQutCanvas && isAllowedPath
+}
+
+function runScrape() {
+  return buildStudyLensSnapshot()
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== MESSAGE_TYPES.SCRAPE) {
+    return false
+  }
+
+  runScrape()
+    .then((snapshot) => {
+      sendResponse({ ok: true, snapshot })
+    })
+    .catch((error) => {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unknown scrape error' })
+    })
+
+  return true
+})
+
+if (isCanvasPage()) {
+  runScrape()
+    .then((snapshot) => chrome.storage.local.set({ studylensSnapshot: snapshot }))
+    .catch(() => {})
+}
