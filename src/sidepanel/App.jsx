@@ -1,3 +1,7 @@
+// sidepanel/App.jsx
+// Navigation controller — manages which screen is shown
+// Passes data between screens
+
 import { useState } from 'react'
 import Overview from '../screens/overview.jsx'
 import UnitView from '../screens/unitView.jsx'
@@ -13,35 +17,37 @@ export default function App() {
     setCurrentScreen('unit')
   }
 
-  function goToAssessment(assessment) {
+  function goToAssessment(assessment, unit) {
     setSelectedAssessment(assessment)
+    // Update unit in case it was refreshed with AI data
+    if (unit) setSelectedUnit(unit)
     setCurrentScreen('assessment')
   }
 
   function goBack() {
     if (currentScreen === 'assessment') setCurrentScreen('unit')
-    if (currentScreen === 'unit') setCurrentScreen('overview')
+    else if (currentScreen === 'unit') setCurrentScreen('overview')
   }
 
   return (
-    <div>
+    <>
       {currentScreen === 'overview' && (
         <Overview onSelectUnit={goToUnit} />
       )}
-      {currentScreen === 'unit' && (
+      {currentScreen === 'unit' && selectedUnit && (
         <UnitView
           unit={selectedUnit}
           onBack={goBack}
           onSelectAssessment={goToAssessment}
         />
       )}
-      {currentScreen === 'assessment' && (
+      {currentScreen === 'assessment' && selectedAssessment && selectedUnit && (
         <AssessmentDetail
           assessment={selectedAssessment}
           unit={selectedUnit}
           onBack={goBack}
         />
       )}
-    </div>
+    </>
   )
 }

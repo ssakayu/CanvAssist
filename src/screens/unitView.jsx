@@ -1,22 +1,32 @@
 // screens/UnitView.jsx
-// Second screen — shown when student taps a unit from Overview
-// Two sub-tabs: Assessments and Materials
-// Tapping an assessment navigates to AssessmentDetail
-
 import { useState, useEffect } from 'react'
-import { getCompletedModules, toggleModuleCompleted } from '../lib/storage.js'
+import { getUnit, getCompletedModules, toggleModuleCompleted } from '../lib/storage.js'
 import { calculateCurrentGrade, calculateRequiredScore, getUnitStatus, getStatusLabel } from '../lib/utils.js'
 
-export default function UnitView({ unit, onBack, onSelectAssessment }) {
+export default function UnitView({ unit: initialUnit, onBack, onSelectAssessment }) {
+  const [unit, setUnit] = useState(initialUnit)
   const [activeTab, setActiveTab] = useState('assessments')
   const [completedModules, setCompletedModules] = useState({})
 
   useEffect(() => {
-    loadCompletedModules()
-  }, [])
+    loadData()
 
-  async function loadCompletedModules() {
-    const completed = await getCompletedModules()
+    // Reload when AI enrichment finishes
+    const handleMessage = (msg) => {
+      if (msg.type === 'AI_UNIT_COMPLETE' && msg.unitId === initialUnit.id) loadData()
+      if (msg.type === 'AI_COMPLETE') loadData()
+    }
+
+    chrome.runtime.onMessage.addListener(handleMessage)
+    return () => chrome.runtime.onMessage.removeListener(handleMessage)
+  }, [initialUnit.id])
+
+  async function loadData() {
+    const [freshUnit, completed] = await Promise.all([
+      getUnit(initialUnit.id),
+      getCompletedModules(),
+    ])
+    if (freshUnit) setUnit(freshUnit)
     setCompletedModules(completed)
   }
 
@@ -31,21 +41,24 @@ export default function UnitView({ unit, onBack, onSelectAssessment }) {
   const neededToPass = calculateRequiredScore(unit.assessments, 50)
 
   return (
-    <div className='unit-view'>
-
-      {/* Header with back button */}
-      <div className='unit-view-header'>
+    <div className='screen'>
+      <div className='app-header'>
         <button className='back-btn' onClick={onBack}>← Back</button>
-        <div className='unit-view-title'>
-          <span className='unit-view-code'>{unit.code}</span>
-          <span className='unit-view-name'>{unit.friendlyName}</span>
+        <span className='app-sync-label'>{unit.code}</span>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {unit.code}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+          {unit.friendlyName}
         </div>
       </div>
 
-      {/* Grade summary */}
       <div className='grade-summary'>
         <div className='grade-summary-item'>
-          <div className='grade-summary-value'>
+          <div className={`grade-summary-value grade-summary-value--${status}`}>
             {grade !== null ? `${grade}%` : '—'}
           </div>
           <div className='grade-summary-label'>Current grade</div>
@@ -64,7 +77,6 @@ export default function UnitView({ unit, onBack, onSelectAssessment }) {
         </div>
       </div>
 
-      {/* Sub tabs */}
       <div className='sub-tabs'>
         <button
           className={`sub-tab ${activeTab === 'assessments' ? 'sub-tab--active' : ''}`}
@@ -82,13 +94,13 @@ export default function UnitView({ unit, onBack, onSelectAssessment }) {
         </button>
       </div>
 
-      {/* Tab content */}
       {activeTab === 'assessments' && (
         <AssessmentsTab
           assessments={unit.assessments}
-          onSelectAssessment={onSelectAssessment}
+          onSelectAssessment={(a) => onSelectAssessment(a, unit)}
         />
       )}
+
       {activeTab === 'materials' && (
         <MaterialsTab
           modules={unit.modules}
@@ -96,7 +108,6 @@ export default function UnitView({ unit, onBack, onSelectAssessment }) {
           onToggle={handleToggleModule}
         />
       )}
-
     </div>
   )
 }
@@ -105,14 +116,9 @@ export default function UnitView({ unit, onBack, onSelectAssessment }) {
 
 function AssessmentsTab({ assessments, onSelectAssessment }) {
   if (assessments.length === 0) {
-    return (
-      <div className='tab-empty'>
-        <p>No assessments found for this unit.</p>
-      </div>
-    )
+    return <div className='tab-empty'>No assessments found.</div>
   }
 
-  // Sort by due date — soonest first
   const sorted = [...assessments].sort((a, b) => {
     if (!a.dueAt) return 1
     if (!b.dueAt) return -1
@@ -120,7 +126,7 @@ function AssessmentsTab({ assessments, onSelectAssessment }) {
   })
 
   return (
-    <div className='assessments-tab'>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {sorted.map(assessment => (
         <AssessmentCard
           key={assessment.id}
@@ -134,10 +140,9 @@ function AssessmentsTab({ assessments, onSelectAssessment }) {
 
 function AssessmentCard({ assessment, onClick }) {
   const { submission, name, dueDateFormatted, daysUntilDue, pointsPossible } = assessment
-
-  const isSubmitted = submission?.status === 'submitted' || submission?.status === 'graded'
   const isGraded = submission?.status === 'graded'
-  const isOverdue = daysUntilDue !== null && daysUntilDue < 0 && !isSubmitted
+  const isSubmitted = submission?.status === 'submitted'
+  const isOverdue = daysUntilDue !== null && daysUntilDue < 0 && !isSubmitted && !isGraded
 
   function getUrgencyClass() {
     if (isGraded) return 'urgency--done'
@@ -148,12 +153,12 @@ function AssessmentCard({ assessment, onClick }) {
   }
 
   function getStatusText() {
-    if (isGraded) return `Graded: ${submission.score ?? '—'}/${pointsPossible}`
+    if (isGraded) return `${submission.score ?? '—'}/${pointsPossible} pts`
     if (isSubmitted) return 'Submitted'
     if (isOverdue) return 'Overdue'
     if (daysUntilDue === 0) return 'Due today'
     if (daysUntilDue === 1) return 'Due tomorrow'
-    if (daysUntilDue !== null) return `Due in ${daysUntilDue} days`
+    if (daysUntilDue !== null) return `${daysUntilDue} days left`
     return 'No due date'
   }
 
@@ -165,11 +170,12 @@ function AssessmentCard({ assessment, onClick }) {
       </div>
       <div className='assessment-card-bottom'>
         <span className='assessment-card-due'>{dueDateFormatted}</span>
-        <span className={`assessment-card-status ${getUrgencyClass()}`}>
+        <span className={`assessment-card-status assessment-card-status--${
+          isGraded ? 'green' : isOverdue ? 'red' : daysUntilDue <= 3 ? 'amber' : 'gray'
+        }`}>
           {getStatusText()}
         </span>
       </div>
-      {/* Urgency bar */}
       <div className='urgency-track'>
         <div className={`urgency-fill ${getUrgencyClass()}`} />
       </div>
@@ -181,19 +187,13 @@ function AssessmentCard({ assessment, onClick }) {
 
 function MaterialsTab({ modules, completedModules, onToggle }) {
   if (modules.length === 0) {
-    return (
-      <div className='tab-empty'>
-        <p>No weekly modules found for this unit.</p>
-      </div>
-    )
+    return <div className='tab-empty'>No weekly modules found.</div>
   }
 
   const completedCount = modules.filter(m => completedModules[m.id]).length
 
   return (
-    <div className='materials-tab'>
-
-      {/* Progress summary */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div className='materials-progress'>
         <span className='materials-progress-text'>
           {completedCount} of {modules.length} weeks covered
@@ -206,7 +206,6 @@ function MaterialsTab({ modules, completedModules, onToggle }) {
         </div>
       </div>
 
-      {/* Module list */}
       {modules.map(module => (
         <ModuleCard
           key={module.id}
@@ -215,53 +214,51 @@ function MaterialsTab({ modules, completedModules, onToggle }) {
           onToggle={() => onToggle(module.id)}
         />
       ))}
-
     </div>
   )
 }
 
 function ModuleCard({ module, completed, onToggle }) {
-  const { weekNumber, topic, items, aiSummary, relevantAssessments } = module
-
   return (
     <div className={`module-card ${completed ? 'module-card--done' : ''}`}>
       <div className='module-card-top'>
-        <div className='module-card-left'>
-          <span className='module-week'>Week {weekNumber}</span>
-          <span className='module-topic'>{topic}</span>
+        <div style={{ flex: 1 }}>
+          <span className='module-week'>Week {module.weekNumber}</span>
+          <span className='module-topic'>{module.topic}</span>
+
+          {/* AI summary — shown once ai.js has enriched */}
+          {module.aiSummary && (
+            <p className='module-summary'>{module.aiSummary}</p>
+          )}
+
+          {/* Relevant assessments — shown once ai.js has enriched */}
+          {module.relevantAssessments?.length > 0 && (
+            <div className='module-relevant'>
+              {module.relevantAssessments.map((a, i) => (
+                <span key={i} className='module-relevant-tag'>{a}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Fallback — show item titles before AI summary */}
+          {!module.aiSummary && (
+            <div className='module-items'>
+              {module.items.map(item => (
+                <span key={item.id} className={`module-item module-item--${item.itemType}`}>
+                  {item.title}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Tick checkbox */}
         <button
           className={`module-tick ${completed ? 'module-tick--done' : ''}`}
           onClick={onToggle}
-          aria-label={completed ? 'Mark as not done' : 'Mark as done'}
         >
           {completed ? '✓' : ''}
         </button>
       </div>
-
-      {/* AI summary if available, otherwise show item titles */}
-      {aiSummary ? (
-        <p className='module-summary'>{aiSummary}</p>
-      ) : (
-        <div className='module-items'>
-          {items.map(item => (
-            <span key={item.id} className={`module-item module-item--${item.itemType}`}>
-              {item.title}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Relevant assessments tags — filled by ai.js later */}
-      {relevantAssessments.length > 0 && (
-        <div className='module-relevant'>
-          {relevantAssessments.map((a, i) => (
-            <span key={i} className='module-relevant-tag'>{a}</span>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
