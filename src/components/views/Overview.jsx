@@ -140,9 +140,9 @@ function UnitCard({ unit, onClick }) {
         <span className={`unit-status ${statusClass}`}>{statusLabel}</span>
       </div>
 
-      <div className='progress-track'>
+      <div className='unit-progress-track'>
         <div
-          className={`progress-fill ${fillClass}`}
+          className={`unit-progress-fill ${fillClass}`}
           style={{ width: `${Math.min(100, Math.max(0, grade ?? 0))}%` }}
         />
       </div>

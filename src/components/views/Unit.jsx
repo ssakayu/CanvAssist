@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useGlobal } from '../../context/GlobalContext'
 import { getUnit, getCompletedModules, toggleModuleCompleted } from '../../lib/storage.js'
-import { calculateCurrentGrade, calculateRequiredScore } from '../../lib/utils.js'
+import { calculateCurrentGrade, calculateRequiredScore, getUrgencyLabel } from '../../lib/utils.js'
 
 export default function Unit({ unitId, unit: initialUnit }) {
   const { setView } = useGlobal()
   const [unit, setUnit] = useState(initialUnit ?? null)
   const [completedModules, setCompletedModules] = useState({})
+  const [activeTab, setActiveTab] = useState('assessments')
 
   useEffect(() => {
     let cancelled = false
@@ -35,83 +36,129 @@ export default function Unit({ unitId, unit: initialUnit }) {
     return new Date(a.dueAt) - new Date(b.dueAt)
   })
 
+  function getUrgencyTone(assessment) {
+    if (assessment.submission?.status === 'graded' || assessment.submission?.status === 'submitted') return 'done'
+    if (assessment.daysUntilDue == null) return 'low'
+    if (assessment.daysUntilDue < 0) return 'overdue'
+    if (assessment.daysUntilDue <= 2) return 'high'
+    if (assessment.daysUntilDue <= 7) return 'medium'
+    return 'low'
+  }
+
+  function getUrgencyWidth(assessment) {
+    if (assessment.submission?.status === 'graded' || assessment.submission?.status === 'submitted') return 100
+    if (assessment.daysUntilDue == null) return 30
+    if (assessment.daysUntilDue < 0) return 95
+    if (assessment.daysUntilDue <= 2) return 85
+    if (assessment.daysUntilDue <= 7) return 55
+    return 30
+  }
+
   return (
-    <div>
-      {/* ── Unit header ── */}
-      <section style={{ marginBottom: 10 }}>
-        <strong>UNIT</strong>
-        <pre>
-{`id           : ${unit.id}
-code         : ${unit.code}
-name         : ${unit.friendlyName}
-currentGrade : ${grade ?? '—'}%
-neededToPass : ${neededToPass ?? '—'}%
-aiLinked     : ${unit.relevantModulesLinked ?? false}`}
-        </pre>
-      </section>
+    <section>
+      <h3 className="section-heading">
+        {unit.code} - {unit.friendlyName}
+      </h3>
+      <p className="assessment-card-due">
+        Current grade: {grade ?? 'N/A'}% - Need {neededToPass ?? 0}% on remaining work to pass
+      </p>
 
-      {/* ── Assessments ── */}
-      <section style={{ marginBottom: 10 }}>
-        <strong>ASSESSMENTS ({sortedAssessments.length})</strong>
-        {sortedAssessments.map(a => (
-          <div key={a.id} style={{ border: '1px solid #ccc', padding: 6, marginTop: 6 }}>
-            <pre>
-{`id           : ${a.id}
-name         : ${a.name}
-dueAt        : ${a.dueAt ?? '—'}
-daysUntilDue : ${a.daysUntilDue ?? '—'}
-points       : ${a.pointsPossible}
-urgencyScore : ${a.urgencyScore ?? '—'}
-gradingType  : ${a.gradingType}
-hasRubric    : ${a.hasRubric}
-aiRubric     : ${a.aiRubricSummary ? `yes (${a.aiRubricSummary.length} bullets)` : 'no'}
-relModules   : ${a.relevantModules?.length ? a.relevantModules.map(m => `W${m.weekNumber}`).join(', ') : 'none'}
-sub.status   : ${a.submission?.status ?? '—'}
-sub.score    : ${a.submission?.score ?? '—'}
-sub.late     : ${a.submission?.late ?? false}
-sub.missing  : ${a.submission?.missing ?? false}
-sub.attempt  : ${a.submission?.attempt ?? '—'}
-description  : ${a.description ? a.description.slice(0, 120) + (a.description.length > 120 ? '…' : '') : '—'}`}
-            </pre>
-            <button onClick={() => setView({ page: 'assessment', params: { assessment: a, unit } })}>
-              → open detail
-            </button>
-          </div>
-        ))}
-      </section>
+      <div className="sub-tabs">
+        <button
+          type="button"
+          className={`sub-tab ${activeTab === 'assessments' ? 'sub-tab--active' : ''}`}
+          onClick={() => setActiveTab('assessments')}
+        >
+          Assessments
+          <span className="sub-tab-count">{sortedAssessments.length}</span>
+        </button>
+        <button
+          type="button"
+          className={`sub-tab ${activeTab === 'modules' ? 'sub-tab--active' : ''}`}
+          onClick={() => setActiveTab('modules')}
+        >
+          Modules
+          <span className="sub-tab-count">{unit.modules?.length ?? 0}</span>
+        </button>
+      </div>
 
-      {/* ── Modules ── */}
-      <section>
-        <strong>MODULES ({unit.modules?.length ?? 0})</strong>
-        {(unit.modules ?? []).map(m => (
-          <div key={m.id} style={{ border: '1px solid #ccc', padding: 6, marginTop: 6 }}>
-            <pre>
-{`id                  : ${m.id}
-weekNumber          : ${m.weekNumber}
-topic               : ${m.topic}
-fullName            : ${m.fullName}
-itemCount           : ${m.itemCount}
-completed           : ${completedModules[m.id] ?? false}
-aiSummary           : ${m.aiSummary ?? '—'}
-relevantAssessments : ${m.relevantAssessments?.length ? m.relevantAssessments.join(', ') : 'none'}`}
-            </pre>
-            <details>
-              <summary>items ({m.items?.length ?? 0})</summary>
-              {(m.items ?? []).map(i => (
-                <pre key={i.id} style={{ marginLeft: 8 }}>
-{`  [${i.itemType}] ${i.title}`}
-                </pre>
-              ))}
-            </details>
-            <button onClick={async () => {
-              const newState = await toggleModuleCompleted(m.id)
-              setCompletedModules(prev => ({ ...prev, [m.id]: newState }))
-            }}>
-              toggle completed
-            </button>
-          </div>
-        ))}
-      </section>
-    </div>
+      {activeTab === 'assessments' && (
+        <div className="unit-list" style={{ marginTop: 10 }}>
+          {sortedAssessments.length === 0 && <p className="tab-empty">No assessments found.</p>}
+          {sortedAssessments.map((assessment) => (
+            <article
+              key={assessment.id}
+              className="assessment-card"
+              onClick={() => setView({ page: 'assessment', params: { assessment, unit } })}
+            >
+              <div className="assessment-card-top">
+                <span className="assessment-card-name">{assessment.name}</span>
+                <span className="assessment-card-points">{assessment.pointsPossible ?? '-'} pts</span>
+              </div>
+              <div className="assessment-card-bottom">
+                <span className="assessment-card-due">{getUrgencyLabel(assessment.daysUntilDue)}</span>
+                <span className={`assessment-card-status assessment-card-status--${assessment.submission?.status === 'graded' ? 'green' : assessment.daysUntilDue != null && assessment.daysUntilDue <= 5 ? 'amber' : 'gray'}`}>
+                  {assessment.submission?.status ?? 'unsubmitted'}
+                </span>
+              </div>
+              <div className="urgency-track">
+                <span
+                  className={`urgency-fill urgency--${getUrgencyTone(assessment)}`}
+                  style={{ width: `${getUrgencyWidth(assessment)}%` }}
+                />
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'modules' && (
+        <div className="unit-list" style={{ marginTop: 10 }}>
+          {(unit.modules?.length ?? 0) === 0 && <p className="tab-empty">No modules found.</p>}
+          {(unit.modules ?? []).map((module) => {
+            const isDone = Boolean(completedModules[module.id])
+            return (
+              <article key={module.id} className={`module-card ${isDone ? 'module-card--done' : ''}`}>
+                <div className="module-card-top">
+                  <button
+                    type="button"
+                    className={`module-tick ${isDone ? 'module-tick--done' : ''}`}
+                    onClick={async () => {
+                      const newState = await toggleModuleCompleted(module.id)
+                      setCompletedModules((prev) => ({ ...prev, [module.id]: newState }))
+                    }}
+                    title={isDone ? 'Mark not completed' : 'Mark completed'}
+                  >
+                    {isDone ? '✓' : ''}
+                  </button>
+
+                  <div>
+                    <span className="module-week">Week {module.weekNumber}</span>
+                    <span className="module-topic">{module.topic}</span>
+                    <p className="module-summary">{module.aiSummary || 'No AI summary available.'}</p>
+                  </div>
+                </div>
+
+                {module.relevantAssessments?.length > 0 && (
+                  <div className="module-relevant">
+                    {module.relevantAssessments.map((name) => (
+                      <span key={name} className="module-relevant-tag">{name}</span>
+                    ))}
+                  </div>
+                )}
+
+                {module.items?.length > 0 && (
+                  <div className="module-items">
+                    {module.items.slice(0, 6).map((item) => (
+                      <span key={item.id} className="module-item">{item.title}</span>
+                    ))}
+                  </div>
+                )}
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }

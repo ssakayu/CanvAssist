@@ -13,6 +13,60 @@ import { saveData, isDataStale, getLastSync, getData } from './lib/storage.js'
 import { addUrgencyScores } from './lib/utils.js'
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
+const AI_FEATURE_ENABLED = import.meta.env.VITE_ENABLE_AI === 'true'
+
+function getAIDisabledReason() {
+  if (!AI_FEATURE_ENABLED) {
+    return 'AI is disabled in this public build.'
+  }
+  if (!hasConfiguredOpenAIKey()) {
+    return 'AI key is missing or placeholder. Configure VITE_OPENAI_API_KEY and rebuild.'
+  }
+  return null
+}
+
+function isAIAvailable() {
+  return getAIDisabledReason() === null
+}
+
+function hasConfiguredOpenAIKey() {
+  const key = OPENAI_API_KEY?.trim()
+  if (!key) return false
+  if (key === 'YOUR_OPENAI_API_KEY_HERE') return false
+  if (key.startsWith('YOUR_OPE')) return false
+  return true
+}
+
+function buildOfflineChatReply(messages, context) {
+  const lastUser = messages?.filter((m) => m?.role === 'user').slice(-1)[0]?.content?.trim() || ''
+  const prompt = lastUser.toLowerCase()
+  const contextText = buildChatContext(context)
+
+  const upcomingMatches = [...contextText.matchAll(/Upcoming:\s*(.*)/g)]
+    .map((m) => m[1])
+    .filter((text) => text && text !== 'none')
+
+  const units = [...contextText.matchAll(/Unit:\s*(.*)/g)].map((m) => m[1]).filter(Boolean)
+
+  if (prompt.includes('due') || prompt.includes('urgent') || prompt.includes('deadline')) {
+    if (upcomingMatches.length > 0) {
+      return `OpenAI is not configured, but here is your built-in study summary.\n\nMost urgent upcoming items:\n- ${upcomingMatches.slice(0, 3).join('\n- ')}\n\nFocus on the first item today, then schedule the next two in your calendar.`
+    }
+    return 'OpenAI is not configured. I cannot rank deadlines from this context yet, but you can sync and check the Overview urgent cards for due-soon items.'
+  }
+
+  if (prompt.includes('grade') || prompt.includes('pass') || prompt.includes('score')) {
+    const gradeMatches = [...contextText.matchAll(/Grade:\s*(.*)/g)].map((m) => m[1]).filter(Boolean)
+    return `OpenAI is not configured, but here is your built-in grade snapshot.\n\n${gradeMatches.length ? gradeMatches.map((g, i) => `Unit ${i + 1}: ${g}`).join('\n') : 'No grade data found in current context.'}\n\nUse the Unit page to check what is needed on remaining assessments to pass.`
+  }
+
+  if (prompt.includes('module') || prompt.includes('material') || prompt.includes('study')) {
+    return 'OpenAI is not configured. Use the Unit -> Modules tab and start with the first unchecked week. Then revise linked assessments shown on each module card.'
+  }
+
+  const unitText = units.length ? units.slice(0, 4).map((u) => `- ${u}`).join('\n') : '- No synced units found yet.'
+  return `OpenAI is not configured, so you are using built-in chat mode.\n\nCurrent units:\n${unitText}\n\nAsk me things like:\n- What is due soon?\n- What should I study this week?\n- Which unit is at risk?`
+}
 
 // ─── KEEP ALIVE ───────────────────────────────────────────────────────────────
 
@@ -61,7 +115,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true
   }
 
+  if (msg.type === 'GET_AI_STATUS') {
+    const reason = getAIDisabledReason()
+    sendResponse({
+      enabled: reason === null,
+      reason: reason ?? null,
+    })
+    return true
+  }
+
   if (msg.type === 'CHAT_MESSAGE') {
+    if (!isAIAvailable()) {
+      sendResponse({ success: true, result: buildOfflineChatReply(msg.messages, msg.context) })
+      return true
+    }
     callOpenAIChat(msg.messages, msg.context)
       .then(result => sendResponse({ success: true, result }))
       .catch(err => sendResponse({ success: false, error: err.message }))
@@ -73,8 +140,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // ─── OPENAI ───────────────────────────────────────────────────────────────────
 
 async function callOpenAI(prompt, maxTokens = 500) {
-  if (!OPENAI_API_KEY) {
-    throw new Error('No OpenAI API key set — add VITE_OPENAI_API_KEY to .env')
+  if (!isAIAvailable()) {
+    throw new Error(getAIDisabledReason())
   }
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -132,8 +199,8 @@ If asked something outside your scope, say so in one sentence and redirect to wh
 Be concise, direct, and practical. No filler phrases.`
 
 async function callOpenAIChat(messages, context) {
-  if (!OPENAI_API_KEY) {
-    throw new Error('No OpenAI API key set — add VITE_OPENAI_API_KEY to .env')
+  if (!isAIAvailable()) {
+    return getAIDisabledReason()
   }
 
   const contextText = buildChatContext(context)
@@ -377,6 +444,16 @@ async function syncCanvasData(force = false) {
     await saveData(unitsWithScores)
     console.log('Canvas sync complete ✅', unitsWithScores.length, 'units saved')
     notifySidePanel({ type: 'SYNC_COMPLETE' })
+
+    if (!isAIAvailable()) {
+      const reason = getAIDisabledReason()
+      console.warn('Skipping AI enrichment:', reason)
+      notifySidePanel({
+        type: 'AI_SKIPPED',
+        reason,
+      })
+      return
+    }
 
     console.log('Starting AI enrichment...')
     notifySidePanel({ type: 'AI_STARTED' })

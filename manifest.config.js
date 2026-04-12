@@ -3,7 +3,7 @@ import pkg from './package.json'
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'CanvAssist',
+  name: 'CanvAssists',
   version: pkg.version,
   icons: {
     48: 'public/logo.png',

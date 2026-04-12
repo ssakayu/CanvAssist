@@ -1,7 +1,7 @@
+
 // api/getActiveCourses.js
 // Step 1 of the data flow — gets all real semester units
 // Returns courseId which is used by every other API call
-
 import { canvasFetch } from './canvasClient.js'
 
 export default async function getActiveCourses() {
@@ -45,4 +45,5 @@ function extractCode(courseCode) {
 // 'CAB302_26se1 Agile Software Engineering' → 'Agile Software Engineering'
 function extractFriendlyName(fullName) {
   return fullName.replace(/^[A-Z]{2,3}\d{3}_\d{2}se\d\s*/, '').trim()
+
 }

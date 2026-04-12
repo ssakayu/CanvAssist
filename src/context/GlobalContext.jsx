@@ -12,23 +12,44 @@ function viewsEqual(a, b) {
  * Holds global context, variable and states for the extension.
  */
 export function GlobalProvider({ children }) {
-  const [view, setViewState] = useState({ page: 'overview', params: {} })
-  const [previousView, setPreviousView] = useState({ page: '', params: {} })
+  const [history, setHistory] = useState([{ page: 'overview', params: {} }])
   const [activeCourses, setActiveCourses] = useState([])
 
-  const setView = useCallback((newView) => {
-    setViewState((current) => {
-      if (!viewsEqual(current, newView)) {
-        setPreviousView(current);
+  const view = history[history.length - 1] ?? { page: 'overview', params: {} }
+  const previousView = history.length > 1 ? history[history.length - 2] : { page: '', params: {} }
+
+  const setView = useCallback((newView, options = {}) => {
+    const { replace = false } = options
+    setHistory((currentHistory) => {
+      const current = currentHistory[currentHistory.length - 1]
+      if (viewsEqual(current, newView)) {
+        return currentHistory
       }
-      return newView;
+
+      if (replace && currentHistory.length > 0) {
+        return [...currentHistory.slice(0, -1), newView]
+      }
+
+      return [...currentHistory, newView]
     })
   }, [])
+
+  const goBack = useCallback(() => {
+    setHistory((currentHistory) => {
+      if (currentHistory.length <= 1) {
+        return currentHistory
+      }
+      return currentHistory.slice(0, -1)
+    })
+  }, [])
+
+  const setPreviousView = useCallback(() => {}, [])
 
   const value = useMemo(
     () => ({
       view,
       setView,
+      goBack,
       activeCourses,
       setActiveCourses,
       previousView,
@@ -37,6 +58,7 @@ export function GlobalProvider({ children }) {
     [
       view,
       setView,
+      goBack,
       activeCourses,
       previousView,
     ],

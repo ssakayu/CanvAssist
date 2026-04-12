@@ -26,16 +26,18 @@ export default function AppWrapper() {
 
       {/* Tabs — only shown on the main overview page */}
       {isMainPage && (
-        <div style={{ display: 'flex', gap: 4, marginBottom: 8, borderBottom: '1px solid #ccc', paddingBottom: 4 }}>
+        <div className="sub-tabs app-main-tabs">
           <button
+            type="button"
+            className={`sub-tab ${tab === 'overview' ? 'sub-tab--active' : ''}`}
             onClick={() => setTab('overview')}
-            style={{ fontWeight: tab === 'overview' ? 'bold' : 'normal' }}
           >
             Overview
           </button>
           <button
+            type="button"
+            className={`sub-tab ${tab === 'chat' ? 'sub-tab--active' : ''}`}
             onClick={() => setTab('chat')}
-            style={{ fontWeight: tab === 'chat' ? 'bold' : 'normal' }}
           >
             Chat
           </button>
