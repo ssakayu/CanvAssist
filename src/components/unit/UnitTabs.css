@@ -1,0 +1,65 @@
+.unit-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #b6b6b6;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.unit-tabs span {
+  width: 50%;
+  text-align: center;
+  color: #b6b6b6;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.unit-tabs span.active {
+  color: #fff;
+  background: #242424;
+}
+
+/* UNIT ASSIGNMENTS */
+.unit-assignments__container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.unit-assignment__card {
+  padding: 8px;
+  border: 1px solid #757575;
+  border-radius: 8px;
+}
+.unit-assignment__card h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+.unit-assignment__card-subtitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #b6b6b6;
+  margin-bottom: 8px;
+}
+
+.unit-assignment__card-progress-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: #757575;
+  border-radius: 2px;
+}
+.unit-assignment__card-progress {
+  height: 3px;
+  width: 50%;
+  background: blue;
+}
+.unit-assignment__card-progress.red {
+  background: red;
+}
+.unit-assignment__card-progress.green {
+  background: green;
+}

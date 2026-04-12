@@ -1,4 +1,4 @@
-import { useGlobal } from '../../context/GlobalContext'
+import { useGlobal } from '../../context/GlobalContext';
 
 export default function Header() {
   const { previousView, view, setView } = useGlobal();

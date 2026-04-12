@@ -1,0 +1,17 @@
+.font-subtitle {
+  font-size: 20px;
+  font-weight: 600;
+}
+.unit-title {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.unit-title * {
+  margin: 0;
+}
+.unit-title p {
+  color: #b6b6b6;
+  margin-bottom: 12px;
+}
+

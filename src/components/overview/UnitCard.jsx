@@ -34,6 +34,7 @@ export default function UnitCard({
         params: {
           unitId: unitId,
           unitCode: code,
+          friendlyName: friendlyName,
         },
       });
     }
