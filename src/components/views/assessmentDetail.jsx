@@ -64,10 +64,11 @@ export default function AssessmentDetail({ assessment: initialAssessment, unit: 
         </div>
       </article>
 
-      {assessment.description && (
+      {assessment.aiDescriptionSummary && (
         <article className="callout" style={{ padding: 12 }}>
-          <h4 className="section-heading" style={{ marginBottom: 6 }}>Description</h4>
-          <p className="assessment-description">{assessment.description}</p>
+          <h4 className="section-heading" style={{ marginBottom: 6 }}>What this assignment asks</h4>
+          <span className="ai-badge">AI summary</span>
+          <p className="ai-summary-item" style={{ marginTop: 8 }}>{assessment.aiDescriptionSummary}</p>
         </article>
       )}
 
@@ -86,14 +87,16 @@ export default function AssessmentDetail({ assessment: initialAssessment, unit: 
 
       <article className="callout" style={{ padding: 12 }}>
         <h4 className="section-heading" style={{ marginBottom: 6 }}>What markers want</h4>
-        {assessment.aiRubricSummary?.length > 0 ? (
+        {!assessment.hasRubric ? (
+          <p className="assessment-card-status">No rubric available for this assessment.</p>
+        ) : assessment.aiRubricSummary?.length > 0 ? (
           <ul className="ai-summary-list">
             {assessment.aiRubricSummary.map((bullet, index) => (
               <li key={index} className="ai-summary-item">{bullet}</li>
             ))}
           </ul>
         ) : (
-          <p className="assessment-card-status">No AI rubric summary available yet.</p>
+          <p className="assessment-card-status">AI rubric summary loading...</p>
         )}
       </article>
 
