@@ -175,16 +175,16 @@
 
 .unit-card {
   text-align: left;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #ffffff;
+  border: 1px solid #d6deea;
   border-radius: 16px;
   padding: 14px;
-  color: var(--ink-light);
+  color: #1f2937;
   cursor: pointer;
 }
 
 .unit-card.selected {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35) inset;
+  box-shadow: 0 0 0 2px rgba(79, 143, 222, 0.35) inset;
 }
 
 .unit-header {
@@ -204,7 +204,7 @@
 .unit-header p {
   margin: 2px 0 0;
   font-size: 12px;
-  color: var(--ink-dark);
+  color: #475569;
 }
 
 .pill {
@@ -269,7 +269,7 @@
   justify-content: space-between;
   gap: 14px;
   font-size: 12px;
-  color: var(--ink-dark);
+  color: #334155;
   font-weight: 600;
 }
 
