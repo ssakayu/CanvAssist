@@ -1,7 +1,7 @@
 import { useGlobal } from '../../context/GlobalContext'
 
 export default function Header() {
-  const { previousView, view, setView } = useGlobal()
+  const { previousView, view, goBack } = useGlobal()
   const canGoBack = Boolean(previousView?.page && view.page !== 'overview')
 
   function handleSync() {
@@ -9,13 +9,21 @@ export default function Header() {
   }
 
   return (
-    <div style={{ borderBottom: '1px solid #000', paddingBottom: 4, marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-      <strong>CanvAssist [DEBUG]</strong>
-      {canGoBack && (
-        <button onClick={() => setView(previousView)}>← back</button>
-      )}
-      <button onClick={handleSync}>↻ sync</button>
-      <span style={{ color: '#666' }}>page: {view.page}</span>
-    </div>
+    <header className="app-header">
+      <strong className="app-logo">
+        <span className="app-logo-dot" aria-hidden="true" />
+        CanvAssist
+      </strong>
+      <div className="app-header-actions">
+        {canGoBack && (
+          <button type="button" className="back-btn" onClick={goBack}>
+            Back
+          </button>
+        )}
+        <button type="button" className="sync-btn sync-btn--inline" onClick={handleSync}>
+          Sync
+        </button>
+      </div>
+    </header>
   )
 }

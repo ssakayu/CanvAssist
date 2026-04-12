@@ -48,11 +48,6 @@ export default function Chat() {
   function send() {
     if (!input.trim() || loading) return
 
-    if (!aiStatus.enabled) {
-      setMessages(prev => [...prev, { role: 'assistant', content: aiStatus.reason || 'AI is not available right now.' }])
-      return
-    }
-
     const userMsg = { role: 'user', content: input.trim() }
     const nextMessages = [...messages, userMsg]
     setMessages(nextMessages)
@@ -72,54 +67,53 @@ export default function Chat() {
   }
 
   return (
-    <div>
-      <strong>CHAT</strong>
-      <p style={{ color: '#666', fontSize: 11, marginTop: 2 }}>
+    <section className="chat-panel">
+      <h3 className="section-heading">Chat</h3>
+      <p className="chat-meta">
         Context: {activeCourses.length} unit{activeCourses.length !== 1 ? 's' : ''} loaded
       </p>
       {!aiStatus.enabled && (
-        <p style={{ color: '#8b5cf6', fontSize: 11, marginTop: 2 }}>
-          {aiStatus.reason}
+        <p className="chat-note">
+          Built-in chat mode active. {aiStatus.reason}
         </p>
       )}
 
-      {/* Message history */}
-      <div style={{ border: '1px solid #ccc', padding: 8, marginTop: 6, minHeight: 200, maxHeight: 380, overflowY: 'auto' }}>
+      <div className="chat-history">
         {messages.length === 0 && (
-          <p style={{ color: '#999' }}>No messages yet. Ask something about your Canvas units.</p>
+          <p className="chat-meta">No messages yet. Ask something about your Canvas units.</p>
         )}
         {messages.map((m, i) => (
-          <div key={i} style={{ marginBottom: 10 }}>
-            <strong>{m.role === 'user' ? 'You' : 'CanvAssist'}:</strong>
-            <p style={{ margin: '2px 0 0 8px', whiteSpace: 'pre-wrap' }}>{m.content}</p>
+          <div key={i} className="chat-entry">
+            <strong className="chat-role">{m.role === 'user' ? 'You' : 'CanvAssist'}</strong>
+            <p className="chat-message">{m.content}</p>
           </div>
         ))}
-        {loading && <p style={{ color: '#999' }}>CanvAssist is thinking...</p>}
+        {loading && <p className="chat-meta">CanvAssist is thinking...</p>}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+      <div className="chat-input-row">
         <input
           type='text'
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && send()}
           placeholder='Ask about your units, assessments, grades...'
-          style={{ flex: 1, padding: 4, fontFamily: 'monospace', fontSize: 12 }}
-          disabled={loading || !aiStatus.enabled}
+          className="chat-input"
+          disabled={loading}
           autoFocus
         />
-        <button onClick={send} disabled={loading || !input.trim() || !aiStatus.enabled}>send</button>
+        <button type="button" className="sync-btn sync-btn--inline" onClick={send} disabled={loading || !input.trim()}>
+          Send
+        </button>
       </div>
 
-      {/* Context debug panel */}
-      <details style={{ marginTop: 8, fontSize: 11 }}>
-        <summary style={{ cursor: 'pointer', color: '#666' }}>context sent to AI</summary>
-        <pre style={{ marginTop: 4, padding: 6, border: '1px solid #eee', whiteSpace: 'pre-wrap', color: '#444' }}>
-          {buildContext()?.rawContext ?? 'no data — sync Canvas first'}
-        </pre>
+      <details className="callout" style={{ padding: 10 }}>
+        <summary className="chat-meta" style={{ cursor: 'pointer' }}>Context sent to assistant</summary>
+        <p className="assessment-description" style={{ marginTop: 8 }}>
+          {buildContext()?.rawContext ?? 'No data - sync Canvas first'}
+        </p>
       </details>
-    </div>
+    </section>
   )
 }

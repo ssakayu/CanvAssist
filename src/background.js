@@ -37,6 +37,37 @@ function hasConfiguredOpenAIKey() {
   return true
 }
 
+function buildOfflineChatReply(messages, context) {
+  const lastUser = messages?.filter((m) => m?.role === 'user').slice(-1)[0]?.content?.trim() || ''
+  const prompt = lastUser.toLowerCase()
+  const contextText = buildChatContext(context)
+
+  const upcomingMatches = [...contextText.matchAll(/Upcoming:\s*(.*)/g)]
+    .map((m) => m[1])
+    .filter((text) => text && text !== 'none')
+
+  const units = [...contextText.matchAll(/Unit:\s*(.*)/g)].map((m) => m[1]).filter(Boolean)
+
+  if (prompt.includes('due') || prompt.includes('urgent') || prompt.includes('deadline')) {
+    if (upcomingMatches.length > 0) {
+      return `OpenAI is not configured, but here is your built-in study summary.\n\nMost urgent upcoming items:\n- ${upcomingMatches.slice(0, 3).join('\n- ')}\n\nFocus on the first item today, then schedule the next two in your calendar.`
+    }
+    return 'OpenAI is not configured. I cannot rank deadlines from this context yet, but you can sync and check the Overview urgent cards for due-soon items.'
+  }
+
+  if (prompt.includes('grade') || prompt.includes('pass') || prompt.includes('score')) {
+    const gradeMatches = [...contextText.matchAll(/Grade:\s*(.*)/g)].map((m) => m[1]).filter(Boolean)
+    return `OpenAI is not configured, but here is your built-in grade snapshot.\n\n${gradeMatches.length ? gradeMatches.map((g, i) => `Unit ${i + 1}: ${g}`).join('\n') : 'No grade data found in current context.'}\n\nUse the Unit page to check what is needed on remaining assessments to pass.`
+  }
+
+  if (prompt.includes('module') || prompt.includes('material') || prompt.includes('study')) {
+    return 'OpenAI is not configured. Use the Unit -> Modules tab and start with the first unchecked week. Then revise linked assessments shown on each module card.'
+  }
+
+  const unitText = units.length ? units.slice(0, 4).map((u) => `- ${u}`).join('\n') : '- No synced units found yet.'
+  return `OpenAI is not configured, so you are using built-in chat mode.\n\nCurrent units:\n${unitText}\n\nAsk me things like:\n- What is due soon?\n- What should I study this week?\n- Which unit is at risk?`
+}
+
 // ─── KEEP ALIVE ───────────────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -95,7 +126,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === 'CHAT_MESSAGE') {
     if (!isAIAvailable()) {
-      sendResponse({ success: true, result: getAIDisabledReason() })
+      sendResponse({ success: true, result: buildOfflineChatReply(msg.messages, msg.context) })
       return true
     }
     callOpenAIChat(msg.messages, msg.context)

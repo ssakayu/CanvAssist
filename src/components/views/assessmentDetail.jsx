@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getUnit } from '../../lib/storage.js'
-import { projectGrade, calculateCurrentGrade } from '../../lib/utils.js'
+import { projectGrade, calculateCurrentGrade, getUrgencyLabel } from '../../lib/utils.js'
 
 export default function AssessmentDetail({ assessment: initialAssessment, unit: initialUnit }) {
   const [assessment, setAssessment] = useState(initialAssessment)
@@ -26,117 +26,106 @@ export default function AssessmentDetail({ assessment: initialAssessment, unit: 
 
   const grade = unit.currentGrade ?? calculateCurrentGrade(unit.assessments)
   const projected = projectGrade(unit.assessments, assessment.id, whatIfScore)
+  const status = assessment.submission?.status ?? 'unsubmitted'
 
   return (
-    <div>
-      {/* ── Assessment fields ── */}
-      <section style={{ marginBottom: 10 }}>
-        <strong>ASSESSMENT</strong>
-        <pre>
-{`id           : ${assessment.id}
-name         : ${assessment.name}
-dueAt        : ${assessment.dueAt ?? '—'}
-daysUntilDue : ${assessment.daysUntilDue ?? '—'}
-points       : ${assessment.pointsPossible}
-urgencyScore : ${assessment.urgencyScore ?? '—'}
-gradingType  : ${assessment.gradingType}
-htmlUrl      : ${assessment.htmlUrl ?? '—'}
-sub.status   : ${assessment.submission?.status ?? '—'}
-sub.score    : ${assessment.submission?.score ?? '—'}
-sub.late     : ${assessment.submission?.late ?? false}
-sub.missing  : ${assessment.submission?.missing ?? false}
-sub.attempt  : ${assessment.submission?.attempt ?? '—'}
-sub.submitted: ${assessment.submission?.submittedAt ?? '—'}
-sub.graded   : ${assessment.submission?.gradedAt ?? '—'}`}
-        </pre>
-        {assessment.description && (
-          <>
-            <strong>description:</strong>
-            <p style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>{assessment.description}</p>
-          </>
-        )}
-      </section>
+    <section className="assessment-panel">
+      <h3 className="section-heading">{assessment.name}</h3>
+      <div className="assessment-card-bottom">
+        <span className="assessment-card-due">{getUrgencyLabel(assessment.daysUntilDue)}</span>
+        <span className="assessment-card-points">{assessment.pointsPossible ?? '-'} pts</span>
+      </div>
 
-      {/* ── Grade context ── */}
-      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
-        <strong>GRADE CONTEXT</strong>
-        <pre>
-{`unit currentGrade : ${grade ?? '—'}%
-unit code         : ${unit.code}`}
-        </pre>
-      </section>
+      <div className="info-grid">
+        <article className="info-card">
+          <div className="info-value">{grade ?? 'N/A'}%</div>
+          <div className="info-label">Current unit grade</div>
+        </article>
+        <article className="info-card">
+          <div className="info-value">{assessment.submission?.score ?? 'N/A'}</div>
+          <div className="info-label">Submitted mark</div>
+        </article>
+      </div>
 
-      {/* ── Rubric (raw) ── */}
-      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
-        <strong>RUBRIC (raw) — hasRubric: {String(assessment.hasRubric)}</strong>
-        {assessment.hasRubric ? (
-          assessment.rubric.map(c => (
-            <div key={c.id} style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid #999' }}>
-              <pre>
-{`criterion : ${c.description}
-points    : ${c.points}
-longDesc  : ${c.longDescription || '—'}`}
-              </pre>
-              {c.ratings.map(r => (
-                <pre key={r.id} style={{ marginLeft: 8 }}>
-{`  rating: ${r.description} (${r.points}pts)
-  desc  : ${r.longDescription || '—'}`}
-                </pre>
-              ))}
-            </div>
-          ))
-        ) : (
-          <p>No rubric</p>
-        )}
-      </section>
+      <article className="callout" style={{ padding: 12 }}>
+        <h4 className="section-heading" style={{ marginBottom: 6 }}>Submission</h4>
+        <div className="assessment-card-bottom">
+          <span className="assessment-card-status">Status: {status}</span>
+          <span className="assessment-card-status">Attempt: {assessment.submission?.attempt ?? '-'}</span>
+        </div>
+        <div className="assessment-card-bottom" style={{ marginTop: 8 }}>
+          {assessment.submission?.late && <span className="meta-tag meta-tag--late">Late</span>}
+          {assessment.submission?.missing && <span className="meta-tag meta-tag--missing">Missing</span>}
+          {assessment.htmlUrl && (
+            <a className="link-button" href={assessment.htmlUrl} target="_blank" rel="noreferrer">
+              Open on Canvas
+            </a>
+          )}
+        </div>
+      </article>
 
-      {/* ── AI rubric summary ── */}
-      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
-        <strong>AI RUBRIC SUMMARY — {assessment.aiRubricSummary ? `${assessment.aiRubricSummary.length} bullets` : 'not generated'}</strong>
-        {assessment.aiRubricSummary ? (
-          <ol style={{ paddingLeft: 16, marginTop: 4 }}>
-            {assessment.aiRubricSummary.map((b, i) => <li key={i}>{b}</li>)}
-          </ol>
-        ) : (
-          <p>—</p>
-        )}
-      </section>
+      {assessment.description && (
+        <article className="callout" style={{ padding: 12 }}>
+          <h4 className="section-heading" style={{ marginBottom: 6 }}>Description</h4>
+          <p className="assessment-description">{assessment.description}</p>
+        </article>
+      )}
 
-      {/* ── Relevant modules ── */}
-      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8, marginBottom: 10 }}>
-        <strong>RELEVANT MODULES — {assessment.relevantModules?.length ? assessment.relevantModules.length : 'none'}</strong>
+      <article className="callout" style={{ padding: 12 }}>
+        <h4 className="section-heading" style={{ marginBottom: 6 }}>Relevant modules</h4>
         {assessment.relevantModules?.length > 0 ? (
-          <ul style={{ paddingLeft: 16, marginTop: 4 }}>
-            {assessment.relevantModules.map(m => (
-              <li key={m.weekNumber}>Week {m.weekNumber}: {m.topic}</li>
+          <div className="module-relevant">
+            {assessment.relevantModules.map((m) => (
+              <span key={m.weekNumber} className="module-relevant-tag">Week {m.weekNumber}: {m.topic}</span>
+            ))}
+          </div>
+        ) : (
+          <p className="assessment-card-status">No linked modules yet.</p>
+        )}
+      </article>
+
+      <article className="callout" style={{ padding: 12 }}>
+        <h4 className="section-heading" style={{ marginBottom: 6 }}>What markers want</h4>
+        {assessment.aiRubricSummary?.length > 0 ? (
+          <ul className="ai-summary-list">
+            {assessment.aiRubricSummary.map((bullet, index) => (
+              <li key={index} className="ai-summary-item">{bullet}</li>
             ))}
           </ul>
         ) : (
-          <p>—</p>
+          <p className="assessment-card-status">No AI rubric summary available yet.</p>
         )}
-      </section>
+      </article>
 
-      {/* ── Grade what-if ── */}
-      <section style={{ borderTop: '1px solid #ccc', paddingTop: 8 }}>
-        <strong>GRADE WHAT-IF</strong>
-        <div style={{ marginTop: 4 }}>
-          <label>
-            if I score {whatIfScore}% on this:
-            <input
-              type='range' min={0} max={100} step={1}
-              value={whatIfScore}
-              onChange={e => setWhatIfScore(Number(e.target.value))}
-              style={{ marginLeft: 8 }}
-            />
-          </label>
+      <article className="callout" style={{ padding: 12 }}>
+        <h4 className="section-heading" style={{ marginBottom: 6 }}>Grade what-if</h4>
+        <input
+          className="grade-slider"
+          type='range'
+          min={0}
+          max={100}
+          step={1}
+          value={whatIfScore}
+          onChange={e => setWhatIfScore(Number(e.target.value))}
+        />
+        <div className="slider-labels">
+          <span>0%</span>
+          <span>If I score {whatIfScore}%</span>
+          <span>100%</span>
         </div>
-        <pre>
-{`currentGrade  : ${grade ?? '—'}%
-projectedGrade: ${projected ?? '—'}%
-pass threshold: 50%
-result        : ${projected === null ? '—' : projected >= 50 ? 'PASS' : 'FAIL'}`}
-        </pre>
-      </section>
-    </div>
+        <div className="calculator-results">
+          <div className="calculator-result-row">
+            <span className="result-label">Projected grade</span>
+            <span className={`result-value ${projected != null && projected >= 50 ? 'result-value--pass' : 'result-value--fail'}`}>
+              {projected ?? 'N/A'}%
+            </span>
+          </div>
+          <div className="calculator-result-row">
+            <span className="result-label">Pass threshold</span>
+            <span className="result-value">50%</span>
+          </div>
+        </div>
+      </article>
+    </section>
   )
 }
