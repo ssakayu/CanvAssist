@@ -190,7 +190,8 @@
 .unit-status--danger  { background: #f8e7eb; color: #bc4a66; }
 .unit-status--unknown { background: #f3f4f6; color: #6b7280; }
 
-.progress-track {
+.unit-progress-track {
+  position: relative;
   width: 100%;
   height: 6px;
   border-radius: 999px;
@@ -199,13 +200,15 @@
   margin-bottom: 10px;
 }
 
-.progress-fill {
+.unit-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
   height: 100%;
   border-radius: 999px;
 }
 
-.progress-fill.green { background: #18c58f; }
-.progress-fill.red   { background: #ef4444; }
+.unit-progress-fill.green { background: #18c58f; }
+.unit-progress-fill.red   { background: #ef4444; }
 
 .unit-card-bottom {
   display: flex;

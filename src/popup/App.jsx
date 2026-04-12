@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { SnapshotModel } from './models/SnapshotModel'
 import { CanvasPopupService } from './services/CanvasPopupService'
@@ -14,9 +14,9 @@ const canvasPopupService = new CanvasPopupService(chrome)
 function statusTone(status = '') {
   const normalized = status.toLowerCase()
   if (normalized.includes('risk') || normalized.includes('overdue')) return 'danger'
-  if (normalized.includes('due')) return 'warn'
+  if (normalized.includes('due')) return 'warning'
   if (normalized.includes('upcoming')) return 'neutral'
-  return 'ok'
+  return 'success'
 }
 
 function progressWidth(value, max = 100) {
@@ -24,15 +24,26 @@ function progressWidth(value, max = 100) {
   return `${clamped}%`
 }
 
+function formatLastSync(date) {
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()
+}
+
+function getUnitHealth(unit) {
+  if (unit.currentGrade == null) return { label: 'No grades yet', tone: 'neutral' }
+  if (unit.currentGrade >= 75) return { label: 'Distinction', tone: 'success' }
+  if (unit.currentGrade >= (unit.passMark ?? 50)) return { label: 'On track', tone: 'success' }
+  return { label: 'At risk', tone: 'danger' }
+}
+
 
 export default function App() {
   const [snapshot, setSnapshot] = useState(null)
   const [selectedUnitCode, setSelectedUnitCode] = useState('')
   const [selectedAssessmentId, setSelectedAssessmentId] = useState('')
-  const [activeTab, setActiveTab] = useState('assessments')
   const [view, setView] = useState(VIEWS.OVERVIEW)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [lastSync, setLastSync] = useState(null)
 
   const units = useMemo(() => SnapshotModel.groupByUnit(snapshot), [snapshot])
   const stats = useMemo(() => SnapshotModel.computeStats(units), [units])
@@ -43,35 +54,51 @@ export default function App() {
     selectedUnit?.assessments[0] ??
     null
 
-  useEffect(() => {
-    async function loadCanvasData() {
-      setIsLoading(true)
-      setError('')
-      const result = await canvasPopupService.loadCanvasData()
-      if (result.snapshot) {
-        setSnapshot(result.snapshot)
-        const initialSelection = SnapshotModel.getInitialSelection(result.snapshot)
-        setSelectedUnitCode(initialSelection.selectedUnitCode)
-        setSelectedAssessmentId(initialSelection.selectedAssessmentId)
-        setError('')
-      } else {
-        setError(result.error || 'Could not load Canvas data')
-      }
+  const mostUrgent = useMemo(() => {
+    return units
+      .flatMap((unit) => unit.assessments.map((assessment) => ({ unit, assessment })))
+      .filter(({ assessment }) => assessment.daysLeft != null)
+      .sort((a, b) => a.assessment.daysLeft - b.assessment.daysLeft)[0]
+  }, [units])
 
-      setIsLoading(false)
+  const loadCanvasData = useCallback(async () => {
+    setIsLoading(true)
+    setError('')
+    const result = await canvasPopupService.loadCanvasData()
+    if (result.snapshot) {
+      setSnapshot(result.snapshot)
+      const initialSelection = SnapshotModel.getInitialSelection(result.snapshot)
+      setSelectedUnitCode(initialSelection.selectedUnitCode)
+      setSelectedAssessmentId(initialSelection.selectedAssessmentId)
+      setLastSync(new Date())
+      setError('')
+    } else {
+      setError(result.error || 'Could not load Canvas data')
     }
 
-    loadCanvasData()
+    setIsLoading(false)
   }, [])
+
+  useEffect(() => {
+    loadCanvasData()
+  }, [loadCanvasData])
 
   return (
     <main className="studylens-shell">
       <header className="sl-header">
         {view === VIEWS.OVERVIEW && (
-          <div className="sl-title-row">
-            <span className="dot" aria-hidden="true" />
-            <h1>CanvAssists</h1>
-          </div>
+          <>
+            <div className="sl-title-row">
+              <h1>CanvAssist</h1>
+            </div>
+            <div className="sync-chip">
+              <span className="dot" aria-hidden="true" />
+              <span>{isLoading ? 'Syncing...' : `Synced ${lastSync ? formatLastSync(lastSync) : 'just now'}`}</span>
+              <button type="button" className="sync-btn" onClick={loadCanvasData} disabled={isLoading}>
+                Sync
+              </button>
+            </div>
+          </>
         )}
         {view !== VIEWS.OVERVIEW && (
           <button
@@ -119,11 +146,25 @@ export default function App() {
             </article>
           </section>
 
+          {mostUrgent && (
+            <article className="urgent-callout">
+              <span className="urgent-label">Most urgent</span>
+              <h3>{mostUrgent.assessment.title}</h3>
+              <span className="urgent-meta">
+                {mostUrgent.unit.code} - Due {mostUrgent.assessment.dueText}
+                {mostUrgent.assessment.possible != null ? ` - ${mostUrgent.assessment.possible}pts` : ''}
+              </span>
+            </article>
+          )}
+
           <p className="section-label">Your Units</p>
           <section className="units-list">
             {units.length === 0 && <p className="empty">No courses found for this semester.</p>}
             {units.map((unit) => {
-              const next = unit.assessments[0]
+              const health = getUnitHealth(unit)
+              const dueSoonCount = unit.assessments.filter(
+                (assessment) => assessment.daysLeft != null && assessment.daysLeft >= 0 && assessment.daysLeft <= 7,
+              ).length
               const ratio = unit.currentGrade != null ? progressWidth(unit.currentGrade) : '35%'
               return (
                 <button
@@ -141,14 +182,16 @@ export default function App() {
                       <h2>{unit.code}</h2>
                       <p>{unit.name}</p>
                     </div>
-                    {next && <span className={`pill ${statusTone(next.status)}`}>{next.status}</span>}
+                    <span className={`pill ${health.tone}`}>{health.label}</span>
                   </div>
                   <div className="progress-track">
                     <span style={{ width: ratio }} />
                   </div>
                   <div className="unit-footer">
-                    <span>Current grade: {unit.currentGrade != null ? `${unit.currentGrade}%` : 'N/A'}</span>
-                    <span>Need {unit.passMark ?? 50}%+ to pass</span>
+                    <span>Current grade: {unit.currentGrade != null ? `${unit.currentGrade}%` : 'No grades yet'}</span>
+                    <span className={dueSoonCount > 0 ? 'due-soon' : ''}>
+                      {dueSoonCount > 0 ? `${dueSoonCount} due soon` : `Need ${unit.passMark ?? 50}%+ to pass`}
+                    </span>
                   </div>
                 </button>
               )
@@ -166,85 +209,72 @@ export default function App() {
             Current grade: {selectedUnit.currentGrade ?? 'N/A'}% - Need {selectedUnit.passMark ?? 50}%+ to pass
           </p>
 
-          <div className="segmented">
-            <button
-              type="button"
-              className={activeTab === 'assessments' ? 'active' : ''}
-              onClick={() => setActiveTab('assessments')}
-            >
-              Assessments
-            </button>
-            <button
-              type="button"
-              className={activeTab === 'materials' ? 'active' : ''}
-              onClick={() => setActiveTab('materials')}
-            >
-              Materials
-            </button>
-          </div>
-
-          {activeTab === 'assessments' && (
-            <div className="stack">
-              {selectedUnit.assessments.length === 0 && <p className="empty">No assessments detected yet.</p>}
-              {selectedUnit.assessments.map((assessment) => (
-                <button
-                  key={assessment.id}
-                  type="button"
-                  className="content-card card-button"
-                  onClick={() => {
-                    setSelectedAssessmentId(assessment.id)
-                    setView(VIEWS.ASSESSMENT)
-                  }}
-                >
-                  <div className="row between">
-                    <h4>{assessment.title}</h4>
-                    <strong>{assessment.overallWeight != null ? `${assessment.overallWeight}%` : '-'}</strong>
-                  </div>
-                  <p>
-                    Due {assessment.dueText}
-                    {assessment.daysLeft != null ? ` - ${assessment.daysLeft} days` : ''}
-                  </p>
-                  <p>
-                    {assessment.score != null && assessment.possible != null
-                      ? `Marks ${assessment.score}/${assessment.possible}`
-                      : 'Marks N/A'}
-                    {' | '}
-                    {assessment.overallWeight != null
-                      ? `Overall ${assessment.overallWeight}%`
-                      : assessment.weight != null
-                        ? `Worth ${assessment.weight} pts`
-                        : 'Worth N/A'}
-                  </p>
-                  <div className="progress-track">
-                    <span
-                      className={statusTone(assessment.status)}
-                      style={{ width: progressWidth(assessment.daysLeft != null ? 100 - assessment.daysLeft * 4 : 20) }}
-                    />
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 'materials' && (
-            <div className="stack">
-              {selectedUnit.resources.length === 0 && <p className="empty">No materials detected yet.</p>}
-              {selectedUnit.resources.map((item) => (
-                <article key={item.id} className="content-card resource">
-                  <div className="row">
-                    <span className="week">{item.week}</span>
-                    <div>
-                      <h4>{item.title}</h4>
-                      <p>{item.description}</p>
-                      <span className={`pill ${item.covered ? 'ok' : 'warn'}`}>
-                        {item.covered ? 'Covered' : 'Not covered yet'}
-                      </span>
+          <div className="detail-columns">
+            <div>
+              <p className="column-title">Assessments</p>
+              <div className="stack">
+                {selectedUnit.assessments.length === 0 && <p className="empty empty-light">No assessments detected yet.</p>}
+                {selectedUnit.assessments.map((assessment) => (
+                  <button
+                    key={assessment.id}
+                    type="button"
+                    className="content-card card-button"
+                    onClick={() => {
+                      setSelectedAssessmentId(assessment.id)
+                      setView(VIEWS.ASSESSMENT)
+                    }}
+                  >
+                    <div className="row between">
+                      <h4>{assessment.title}</h4>
+                      <strong>{assessment.overallWeight != null ? `${assessment.overallWeight}%` : '-'}</strong>
                     </div>
-                  </div>
-                </article>
-              ))}
+                    <p>
+                      Due {assessment.dueText}
+                      {assessment.daysLeft != null ? ` - ${assessment.daysLeft} days` : ''}
+                    </p>
+                    <p>
+                      {assessment.score != null && assessment.possible != null
+                        ? `Marks ${assessment.score}/${assessment.possible}`
+                        : 'Marks N/A'}
+                      {' | '}
+                      {assessment.overallWeight != null
+                        ? `Overall ${assessment.overallWeight}%`
+                        : assessment.weight != null
+                          ? `Worth ${assessment.weight} pts`
+                          : 'Worth N/A'}
+                    </p>
+                    <div className="progress-track">
+                      <span
+                        className={statusTone(assessment.status)}
+                        style={{ width: progressWidth(assessment.daysLeft != null ? 100 - assessment.daysLeft * 4 : 20) }}
+                      />
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+
+            <div>
+              <p className="column-title">Materials</p>
+              <div className="stack">
+                {selectedUnit.resources.length === 0 && <p className="empty empty-light">No materials detected yet.</p>}
+                {selectedUnit.resources.map((item) => (
+                  <article key={item.id} className="content-card resource">
+                    <div className="row">
+                      <span className="week">{item.week}</span>
+                      <div>
+                        <h4>{item.title}</h4>
+                        <p>{item.description}</p>
+                        <span className={`pill ${item.covered ? 'success' : 'warning'}`}>
+                          {item.covered ? 'Covered' : 'Not covered yet'}
+                        </span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
 
         </section>
       )}

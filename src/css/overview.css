@@ -256,7 +256,8 @@ body {
   color: rgb(39, 53, 64);
 }
 
-.progress-track {
+.unit-progress-track {
+  position: relative;
   width: 100%;
   height: 6px;
   border-radius: 999px;
@@ -265,16 +266,18 @@ body {
   margin-bottom: 12px;
 }
 
-.progress-fill {
+.unit-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
   height: 100%;
   border-radius: 999px;
 }
 
-.progress-fill.green {
+.unit-progress-fill.green {
   background: #18c58f;
 }
 
-.progress-fill.red {
+.unit-progress-fill.red {
   background: #ef4444;
 }
 

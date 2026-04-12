@@ -7,11 +7,25 @@ export default function Chat() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [aiStatus, setAiStatus] = useState({ enabled: false, reason: 'Checking AI availability...' })
   const bottomRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'GET_AI_STATUS' }, (response) => {
+      if (chrome.runtime.lastError) {
+        setAiStatus({ enabled: false, reason: 'Unable to determine AI availability.' })
+        return
+      }
+      setAiStatus({
+        enabled: Boolean(response?.enabled),
+        reason: response?.reason ?? null,
+      })
+    })
+  }, [])
 
   function buildContext() {
     if (!activeCourses.length) return null
@@ -33,6 +47,11 @@ export default function Chat() {
 
   function send() {
     if (!input.trim() || loading) return
+
+    if (!aiStatus.enabled) {
+      setMessages(prev => [...prev, { role: 'assistant', content: aiStatus.reason || 'AI is not available right now.' }])
+      return
+    }
 
     const userMsg = { role: 'user', content: input.trim() }
     const nextMessages = [...messages, userMsg]
@@ -58,6 +77,11 @@ export default function Chat() {
       <p style={{ color: '#666', fontSize: 11, marginTop: 2 }}>
         Context: {activeCourses.length} unit{activeCourses.length !== 1 ? 's' : ''} loaded
       </p>
+      {!aiStatus.enabled && (
+        <p style={{ color: '#8b5cf6', fontSize: 11, marginTop: 2 }}>
+          {aiStatus.reason}
+        </p>
+      )}
 
       {/* Message history */}
       <div style={{ border: '1px solid #ccc', padding: 8, marginTop: 6, minHeight: 200, maxHeight: 380, overflowY: 'auto' }}>
@@ -83,10 +107,10 @@ export default function Chat() {
           onKeyDown={e => e.key === 'Enter' && send()}
           placeholder='Ask about your units, assessments, grades...'
           style={{ flex: 1, padding: 4, fontFamily: 'monospace', fontSize: 12 }}
-          disabled={loading}
+          disabled={loading || !aiStatus.enabled}
           autoFocus
         />
-        <button onClick={send} disabled={loading || !input.trim()}>send</button>
+        <button onClick={send} disabled={loading || !input.trim() || !aiStatus.enabled}>send</button>
       </div>
 
       {/* Context debug panel */}

@@ -13,6 +13,29 @@ import { saveData, isDataStale, getLastSync, getData } from './lib/storage.js'
 import { addUrgencyScores } from './lib/utils.js'
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
+const AI_FEATURE_ENABLED = import.meta.env.VITE_ENABLE_AI === 'true'
+
+function getAIDisabledReason() {
+  if (!AI_FEATURE_ENABLED) {
+    return 'AI is disabled in this public build.'
+  }
+  if (!hasConfiguredOpenAIKey()) {
+    return 'AI key is missing or placeholder. Configure VITE_OPENAI_API_KEY and rebuild.'
+  }
+  return null
+}
+
+function isAIAvailable() {
+  return getAIDisabledReason() === null
+}
+
+function hasConfiguredOpenAIKey() {
+  const key = OPENAI_API_KEY?.trim()
+  if (!key) return false
+  if (key === 'YOUR_OPENAI_API_KEY_HERE') return false
+  if (key.startsWith('YOUR_OPE')) return false
+  return true
+}
 
 // ─── KEEP ALIVE ───────────────────────────────────────────────────────────────
 
@@ -61,7 +84,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true
   }
 
+  if (msg.type === 'GET_AI_STATUS') {
+    const reason = getAIDisabledReason()
+    sendResponse({
+      enabled: reason === null,
+      reason: reason ?? null,
+    })
+    return true
+  }
+
   if (msg.type === 'CHAT_MESSAGE') {
+    if (!isAIAvailable()) {
+      sendResponse({ success: true, result: getAIDisabledReason() })
+      return true
+    }
     callOpenAIChat(msg.messages, msg.context)
       .then(result => sendResponse({ success: true, result }))
       .catch(err => sendResponse({ success: false, error: err.message }))
@@ -73,8 +109,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // ─── OPENAI ───────────────────────────────────────────────────────────────────
 
 async function callOpenAI(prompt, maxTokens = 500) {
-  if (!OPENAI_API_KEY) {
-    throw new Error('No OpenAI API key set — add VITE_OPENAI_API_KEY to .env')
+  if (!isAIAvailable()) {
+    throw new Error(getAIDisabledReason())
   }
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -132,8 +168,8 @@ If asked something outside your scope, say so in one sentence and redirect to wh
 Be concise, direct, and practical. No filler phrases.`
 
 async function callOpenAIChat(messages, context) {
-  if (!OPENAI_API_KEY) {
-    throw new Error('No OpenAI API key set — add VITE_OPENAI_API_KEY to .env')
+  if (!isAIAvailable()) {
+    return getAIDisabledReason()
   }
 
   const contextText = buildChatContext(context)
@@ -377,6 +413,16 @@ async function syncCanvasData(force = false) {
     await saveData(unitsWithScores)
     console.log('Canvas sync complete ✅', unitsWithScores.length, 'units saved')
     notifySidePanel({ type: 'SYNC_COMPLETE' })
+
+    if (!isAIAvailable()) {
+      const reason = getAIDisabledReason()
+      console.warn('Skipping AI enrichment:', reason)
+      notifySidePanel({
+        type: 'AI_SKIPPED',
+        reason,
+      })
+      return
+    }
 
     console.log('Starting AI enrichment...')
     notifySidePanel({ type: 'AI_STARTED' })
