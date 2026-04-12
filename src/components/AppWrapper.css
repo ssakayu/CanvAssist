@@ -1,0 +1,97 @@
+.app-header-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.sync-btn--inline {
+	margin-top: 0;
+	padding: 8px 12px;
+}
+
+.app-main-tabs {
+	margin-bottom: 10px;
+}
+
+.chat-panel,
+.assessment-panel {
+	display: grid;
+	gap: 10px;
+}
+
+.chat-meta {
+	margin: 0;
+	color: var(--text-secondary);
+	font-size: 12px;
+}
+
+.chat-history {
+	border: 1px solid var(--line);
+	border-radius: var(--radius-lg);
+	background: var(--bg-soft);
+	padding: 10px;
+	min-height: 220px;
+	max-height: 360px;
+	overflow-y: auto;
+}
+
+.chat-entry {
+	margin-bottom: 10px;
+}
+
+.chat-role {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text-primary);
+}
+
+.chat-message {
+	margin: 3px 0 0;
+	color: var(--text-secondary);
+	font-size: 13px;
+	white-space: pre-wrap;
+}
+
+.chat-input-row {
+	display: flex;
+	gap: 8px;
+}
+
+.chat-input {
+	flex: 1;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	background: var(--bg-soft);
+	color: var(--text-primary);
+	padding: 10px;
+	font-size: 13px;
+}
+
+.chat-input::placeholder {
+	color: var(--text-tertiary);
+}
+
+.chat-note {
+	margin: 0;
+	color: #9cc7ff;
+	font-size: 12px;
+}
+
+.assessment-description {
+	margin: 0;
+	color: var(--text-secondary);
+	font-size: 13px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+.link-button {
+	color: #9cc7ff;
+	text-decoration: none;
+	font-size: 12px;
+}
+
+.link-button:hover {
+	text-decoration: underline;
+}

@@ -3,25 +3,28 @@ import pkg from './package.json'
 
 export default defineManifest({
   manifest_version: 3,
-  name: pkg.name,
+  name: 'CanvAssists',
   version: pkg.version,
   icons: {
     48: 'public/logo.png',
   },
   permissions: [
+    'storage',
     'sidePanel',
-    'contentSettings',
+    'tabs',
+    'alarms', 
   ],
-  action: {
-    default_icon: {
-      48: 'public/logo.png',
-    },
-    default_popup: 'src/popup/index.html',
+  host_permissions: [
+    'https://*.instructure.com/*',
+    'https://canvas.qut.edu.au/*',
+    'https://api.openai.com/*',
+  ],
+  background: {
+    service_worker: 'src/background.js',
+    type: 'module',
+    persistent: false,
   },
-  content_scripts: [{
-    js: ['src/content/main.jsx'],
-    matches: ['https://*/*'],
-  }],
+  action: {},
   side_panel: {
     default_path: 'src/sidepanel/index.html',
   },
