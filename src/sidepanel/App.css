@@ -196,11 +196,11 @@ button {
 
 .unit-card {
   text-align: left;
-  border: 1px solid var(--line);
+  border: 1px solid #d6deea;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.08);
+  background: #ffffff;
   padding: 11px;
-  color: var(--text-primary);
+  color: #1f2937;
   cursor: pointer;
 }
 
@@ -222,7 +222,7 @@ button {
 }
 
 .unit-name {
-  color: var(--text-secondary);
+  color: #475569;
   font-size: 12px;
 }
 
@@ -283,7 +283,7 @@ button {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  color: var(--text-secondary);
+  color: #334155;
   font-size: 12px;
 }
 
