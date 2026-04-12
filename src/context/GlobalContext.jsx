@@ -14,6 +14,8 @@ function viewsEqual(a, b) {
 export function GlobalProvider({ children }) {
   const [history, setHistory] = useState([{ page: 'overview', params: {} }])
   const [activeCourses, setActiveCourses] = useState([])
+  const [syncPhase, setSyncPhase] = useState('idle') // 'idle' | 'canvas' | 'ai' | 'done'
+  const [aiProgress, setAiProgress] = useState({ completed: 0, total: 0 })
 
   const view = history[history.length - 1] ?? { page: 'overview', params: {} }
   const previousView = history.length > 1 ? history[history.length - 2] : { page: '', params: {} }
@@ -54,6 +56,10 @@ export function GlobalProvider({ children }) {
       setActiveCourses,
       previousView,
       setPreviousView,
+      syncPhase,
+      setSyncPhase,
+      aiProgress,
+      setAiProgress,
     }),
     [
       view,
@@ -61,6 +67,8 @@ export function GlobalProvider({ children }) {
       goBack,
       activeCourses,
       previousView,
+      syncPhase,
+      aiProgress,
     ],
   );
 
