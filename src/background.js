@@ -321,6 +321,30 @@ Return only the bullet points, one per line, no numbering, no extra commentary.
     })
   )
 
+  // ── Step 1.5: Summarise assignment descriptions ───────────────────────────
+  enrichedAssessments = await Promise.all(
+    enrichedAssessments.map(async (assessment) => {
+      if (assessment.aiDescriptionSummary) return assessment
+      if (!assessment.description) return assessment
+      if (assessment.description.split(/\s+/).filter(Boolean).length <= 50) return assessment
+
+      console.log(`Summarising description for ${assessment.name}...`)
+
+      const descriptionPrompt = `Summarise this university assignment description in 2-3 plain-English sentences.
+Focus only on what the student must produce or do — not admin details like submission portals, file formats, or word count.
+Write as if explaining to the student directly. Use simple, clear language.
+Return only the summary sentences, nothing else.
+
+Assignment: "${assessment.name}"
+Description:
+${assessment.description.slice(0, 1200)}`
+
+      const aiDescriptionSummary = await callOpenAI(descriptionPrompt, 120).catch(() => null)
+
+      return { ...assessment, aiDescriptionSummary }
+    })
+  )
+
   // ── Step 2: Summarise weekly modules ──────────────────────────────────────
   let enrichedModules = await Promise.all(
     unit.modules.map(async (module) => {

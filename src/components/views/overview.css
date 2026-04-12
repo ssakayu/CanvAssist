@@ -1,59 +1,14 @@
 .studylens-card {
   width: 100%;
-  background: rgb(0, 102, 185);
-  border: 1px solid #4b4b4b;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 26px;
   padding: 22px 18px 24px;
   color: #f6efe4;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 22px;
-}
 
-.brand h1 {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.dot.green {
-  background: #18c58f;
-  box-shadow: 0 0 8px rgba(24, 197, 143, 0.5);
-}
-
-.sync-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: white;
-}
-
-.sync-btn {
-  border-radius: 999px;
-  border: none;
-  background: #18c58f;
-  color: white;
-  padding: 7px 14px;
-  font-size: 13px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.sync-btn:hover {
-  background: #14ae7d;
-}
 
 .stats-grid {
   display: grid;
@@ -101,8 +56,8 @@
 
 /* ── Most urgent card ── */
 .unit-card-urgent {
-  background: #212121;
-  border: 1px solid white;
+  background: rgba(242, 140, 140, 0.12);
+  border: 1px solid rgba(242, 140, 140, 0.24);
   border-radius: 16px;
   padding: 14px 16px;
   margin-bottom: 4px;
@@ -113,7 +68,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: #9ca3af;
+  color: #ffd9d9;
   text-transform: uppercase;
   display: block;
   margin-bottom: 6px;
@@ -122,15 +77,15 @@
 .urgent-name {
   font-size: 15px;
   font-weight: 600;
-  color: #f6efe4;
+  color: #fff7f7;
   display: block;
   margin-bottom: 10px;
 }
 
 .urgent-meta {
   display: inline-block;
-  background: #ef4444;
-  color: white;
+  background: rgb(239,68,68);
+  color: #fff1f1;
   font-size: 12px;
   font-weight: 600;
   padding: 6px 12px;
@@ -139,10 +94,11 @@
 
 /* ── Unit cards ── */
 .unit-card {
-  background: white;
+  background: #ffffff;
+  border: 1px solid #d6deea;
   border-radius: 18px;
   padding: 16px 18px;
-  color: rgb(39, 53, 64);
+  color: #1f2937;
   cursor: pointer;
 }
 
@@ -167,12 +123,12 @@
 .unit-code {
   font-size: 17px;
   font-weight: 700;
-  color: rgb(39, 53, 64);
+  color: #1f2937;
 }
 
 .unit-name {
   font-size: 13px;
-  color: rgb(39, 53, 64);
+  color: #475569;
   line-height: 1.3;
 }
 
@@ -216,30 +172,11 @@
   align-items: center;
   font-size: 13px;
   font-weight: 600;
-  color: rgb(39, 53, 64);
+  color: #334155;
 }
 
 .unit-upcoming {
   font-size: 12px;
   color: #ef4444;
   font-weight: 600;
-}
-
-/* ── Debug section ── */
-.debug-section {
-  margin-top: 18px;
-}
-
-.debug-section summary {
-  font-size: 11px;
-  color: rgba(246, 239, 228, 0.6);
-  cursor: pointer;
-  letter-spacing: 0.05em;
-}
-
-.debug-section pre {
-  font-size: 10px;
-  color: rgba(246, 239, 228, 0.8);
-  margin-top: 6px;
-  white-space: pre-wrap;
 }

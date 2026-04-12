@@ -18,17 +18,9 @@ export default function Overview() {
     return () => chrome.runtime.onMessage.removeListener(handleMessage)
   }, [])
 
-  function handleSync() {
-    chrome.runtime.sendMessage({ type: 'SYNC_NOW' })
-  }
-
   if (activeCourses.length === 0) {
     return (
       <div className='studylens-card'>
-        <div className='topbar'>
-          <div className='brand'><h1>CanvAssist</h1></div>
-          <button className='sync-btn' onClick={handleSync}>Sync Canvas data</button>
-        </div>
         <p style={{ color: '#f6efe4', fontSize: 14 }}>No data yet — sync Canvas to get started.</p>
       </div>
     )
@@ -42,17 +34,6 @@ export default function Overview() {
 
   return (
     <div className='studylens-card'>
-
-      {/* ── Topbar ── */}
-      <div className='topbar'>
-        <div className='brand'><h1>CanvAssist</h1></div>
-        <div className='sync-pill'>
-          <span className='dot green' />
-          <span>{formatLastSync(lastSync)}</span>
-          <button className='sync-btn' onClick={handleSync}>Sync</button>
-        </div>
-      </div>
-
       {/* ── Stats grid ── */}
       <div className='stats-grid'>
         <div className='stat-box'>
@@ -95,19 +76,6 @@ export default function Overview() {
           />
         ))}
       </div>
-
-      {/* ── Debug: ranked assessments ── */}
-      <details className='debug-section'>
-        <summary>debug — all assessments ranked by urgency ({allAssessments.length})</summary>
-        <ol style={{ paddingLeft: 16, marginTop: 6 }}>
-          {allAssessments.map(a => (
-            <li key={a.id}>
-              <pre>{`[${a.unitCode}] ${a.name}
-  urgency: ${a.urgencyScore ?? '—'}  days: ${a.daysUntilDue ?? '—'}  pts: ${a.pointsPossible}  status: ${a.submission?.status ?? '—'}`}</pre>
-            </li>
-          ))}
-        </ol>
-      </details>
 
     </div>
   )
