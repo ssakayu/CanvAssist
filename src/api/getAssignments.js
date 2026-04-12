@@ -48,6 +48,7 @@ function cleanAssignment(a) {
     // Computed fields used by utils.js for urgency scoring
     urgencyScore: 0,          // calculated later by utils.js
     aiRubricSummary: null,    // filled later by ai.js
+    aiDescriptionSummary: null, // filled later by ai.js
     relevantModules: [],      // filled later by ai.js
   }
 }

@@ -1,10 +1,12 @@
 import { useGlobal } from '../../context/GlobalContext'
 
 export default function Header() {
-  const { previousView, view, goBack } = useGlobal()
+  const { previousView, view, goBack, syncPhase } = useGlobal()
   const canGoBack = Boolean(previousView?.page && view.page !== 'overview')
+  const isSyncing = syncPhase !== 'idle'
 
   function handleSync() {
+    if (isSyncing) return
     chrome.runtime.sendMessage({ type: 'SYNC_NOW' })
   }
 
@@ -20,7 +22,12 @@ export default function Header() {
             Back
           </button>
         )}
-        <button type="button" className="sync-btn sync-btn--inline" onClick={handleSync}>
+        <button
+          type="button"
+          className="sync-btn sync-btn--inline"
+          onClick={handleSync}
+          disabled={isSyncing}
+        >
           Sync
         </button>
       </div>
