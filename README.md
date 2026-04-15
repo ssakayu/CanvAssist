@@ -44,3 +44,5 @@ CanvAssist piggybacks on the student's existing Canvas browser session — no AP
 ### 7. AI Study Assistant (Chatbot)
 
 A built-in study assistant that answers questions based on the student's real Canvas data. Unlike a generic AI chatbot, CanvAssist's assistant already knows the student's current grades, upcoming deadlines, and decoded rubric criteria — so answers are personalised to their actual situation. Students can ask things like "what do I need to focus on for my CAB302 milestone?" and receive specific, actionable advice rather than generic study tips.
+
+> Built as part of the QUT AIML Society Hackathon by team SnackOverflowers.
